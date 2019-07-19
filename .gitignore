@@ -83,6 +83,7 @@ modules.builtin
 include/config
 include/generated
 arch/*/include/generated
+scripts/dtc/include-prefixes
 
 # stgit generated dirs
 patches-*
