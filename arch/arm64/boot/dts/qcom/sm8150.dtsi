@@ -704,7 +704,8 @@
 		};
 
 		ramoops: ramoops@b0000000 {
-			compatible = "ramoops";
+			compatible = "removed-dma-pool", "ramoops";
+			no-map;
 			reg = <0 0xb0000000 0 0x400000>;
 		};
 
