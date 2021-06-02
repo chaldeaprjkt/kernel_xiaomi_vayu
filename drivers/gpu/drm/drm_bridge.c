@@ -301,8 +301,14 @@ void drm_bridge_post_disable(struct drm_bridge *bridge)
 	if (!bridge)
 		return;
 
+	if (bridge->is_dsi_drm_bridge)
+		mutex_lock(&bridge->lock);
+
 	if (bridge->funcs->post_disable)
 		bridge->funcs->post_disable(bridge);
+
+	if (bridge->is_dsi_drm_bridge)
+		mutex_unlock(&bridge->lock);
 
 	drm_bridge_post_disable(bridge->next);
 }
@@ -352,10 +358,30 @@ void drm_bridge_pre_enable(struct drm_bridge *bridge)
 
 	drm_bridge_pre_enable(bridge->next);
 
+	if (bridge->is_dsi_drm_bridge)
+		mutex_lock(&bridge->lock);
+
 	if (bridge->funcs->pre_enable)
 		bridge->funcs->pre_enable(bridge);
+
+	if (bridge->is_dsi_drm_bridge)
+		mutex_unlock(&bridge->lock);
 }
 EXPORT_SYMBOL(drm_bridge_pre_enable);
+
+int drm_get_panel_info(struct drm_bridge *bridge, char *buf)
+{
+	int rc = 0;
+	if (!bridge)
+		return rc;
+
+	if (bridge->funcs->disp_get_panel_info)
+		return bridge->funcs->disp_get_panel_info(bridge, buf);
+
+	return rc;
+}
+EXPORT_SYMBOL(drm_get_panel_info);
+
 
 /**
  * drm_bridge_enable - enables all bridges in the encoder chain
