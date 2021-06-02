@@ -153,6 +153,7 @@ static irqreturn_t nqx_dev_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+#ifndef CONFIG_MACH_XIAOMI_VAYU
 static int is_data_available_for_read(struct nqx_dev *nqx_dev)
 {
 	int ret;
@@ -162,6 +163,7 @@ static int is_data_available_for_read(struct nqx_dev *nqx_dev)
 		!nqx_dev->irq_enabled, msecs_to_jiffies(MAX_IRQ_WAIT_TIME));
 	return ret;
 }
+#endif
 
 static ssize_t nfc_read(struct file *filp, char __user *buf,
 					size_t count, loff_t *offset)
@@ -208,7 +210,7 @@ static ssize_t nfc_read(struct file *filp, char __user *buf,
 
 			if (gpio_get_value(nqx_dev->irq_gpio))
 				break;
-			dev_err_ratelimited(&nqx_dev->client->dev,
+			dev_dbg_ratelimited(&nqx_dev->client->dev,
 			"gpio is low, no need to read data\n");
 		}
 	}
@@ -348,9 +350,13 @@ static int sn100_ese_pwr(struct nqx_dev *nqx_dev, unsigned long int arg)
 		 * VEN state will remain HIGH if NFC is enabled otherwise
 		 * it will be set as LOW
 		 */
+#ifdef CONFIG_MACH_XIAOMI_VAYU
+		if (!gpio_get_value(nqx_dev->en_gpio)) {
+#else
 		nqx_dev->nfc_ven_enabled =
 			gpio_get_value(nqx_dev->en_gpio);
 		if (!nqx_dev->nfc_ven_enabled) {
+#endif
 			dev_dbg(&nqx_dev->client->dev, "eSE HAL service setting en_gpio HIGH\n");
 			gpio_set_value(nqx_dev->en_gpio, 1);
 			/* hardware dependent delay */
@@ -792,6 +798,7 @@ static const struct file_operations nfc_dev_fops = {
 #endif
 };
 
+#ifndef CONFIG_MACH_XIAOMI_VAYU
 /*
  * function: get_nfcc_hw_info()
  *
@@ -1112,6 +1119,7 @@ done:
 
 	return ret;
 }
+#endif
 
 /*
  * Routine to enable clock.
@@ -1431,13 +1439,18 @@ static int nqx_probe(struct i2c_client *client,
 	/* NFC_INT IRQ */
 	nqx_dev->irq_enabled = true;
 	r = request_irq(client->irq, nqx_dev_irq_handler,
+#ifdef CONFIG_MACH_XIAOMI_VAYU
+			  IRQF_TRIGGER_RISING, client->name, nqx_dev);
+#else
 			  IRQF_TRIGGER_HIGH, client->name, nqx_dev);
+#endif
 	if (r) {
 		dev_err(&client->dev, "%s: request_irq failed\n", __func__);
 		goto err_request_irq_failed;
 	}
 	nqx_disable_irq(nqx_dev);
 
+#ifndef CONFIG_MACH_XIAOMI_VAYU
 	/*
 	 * To be efficient we need to test whether nfcc hardware is physically
 	 * present before attempting further hardware initialisation.
@@ -1450,6 +1463,7 @@ static int nqx_probe(struct i2c_client *client,
 		/* We don't think there is hardware switch NFC OFF */
 		goto err_request_hw_check_failed;
 	}
+#endif
 
 	/* Register reboot notifier here */
 	r = register_reboot_notifier(&nfcc_notifier);
@@ -1618,8 +1632,17 @@ static int nfcc_reboot(struct notifier_block *notifier, unsigned long val,
 /*
  * module load/unload record keeping
  */
+#ifdef CONFIG_MACH_XIAOMI_VAYU
+extern char *saved_command_line;
+#endif
 static int __init nqx_dev_init(void)
 {
+#ifdef CONFIG_MACH_XIAOMI_VAYU
+	if (strstr(saved_command_line, "androidboot.product.hardware.sku=bhima")) {
+		printk(KERN_ERR "not an NFC phone");
+		return -1;
+	}
+#endif
 	return i2c_add_driver(&nqx);
 }
 module_init(nqx_dev_init);
