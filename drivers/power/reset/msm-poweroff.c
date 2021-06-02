@@ -164,6 +164,10 @@ static bool get_dload_mode(void)
 
 static void enable_emergency_dload_mode(void)
 {
+#ifdef CONFIG_MACH_XIAOMI
+	qpnp_pon_set_restart_reason(PON_RESTART_REASON_NORMAL);
+	__raw_writel(0x77665501, restart_reason);
+#else
 	int ret;
 
 	if (emergency_dload_mode_addr) {
@@ -187,6 +191,7 @@ static void enable_emergency_dload_mode(void)
 	ret = scm_set_dload_mode(SCM_EDLOAD_MODE, 0);
 	if (ret)
 		pr_err("Failed to set secure EDLOAD mode: %d\n", ret);
+#endif
 }
 
 static int dload_set(const char *val, const struct kernel_param *kp)
@@ -318,7 +323,9 @@ static void msm_restart_prepare(const char *cmd)
 	else
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 
-	if (cmd != NULL) {
+	if (in_panic) {
+		qpnp_pon_set_restart_reason(PON_RESTART_REASON_PANIC);
+	} else if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_BOOTLOADER);
@@ -354,8 +361,12 @@ static void msm_restart_prepare(const char *cmd)
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
 		} else {
+			qpnp_pon_set_restart_reason(PON_RESTART_REASON_NORMAL);
 			__raw_writel(0x77665501, restart_reason);
 		}
+	} else {
+		qpnp_pon_set_restart_reason(PON_RESTART_REASON_NORMAL);
+		__raw_writel(0x77665501, restart_reason);
 	}
 
 	flush_cache_all();
