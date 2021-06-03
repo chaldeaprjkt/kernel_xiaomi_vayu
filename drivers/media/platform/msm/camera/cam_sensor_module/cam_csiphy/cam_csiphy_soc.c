@@ -12,7 +12,11 @@
 
 #include "cam_csiphy_soc.h"
 #include "cam_csiphy_core.h"
+#ifdef CONFIG_MACH_XIAOMI_VAYU
+#include "include/cam_csiphy_1_1_hwreg_vayu.h"
+#else
 #include "include/cam_csiphy_1_1_hwreg.h"
+#endif
 #include "include/cam_csiphy_1_0_hwreg.h"
 #include "include/cam_csiphy_1_2_hwreg.h"
 #include "include/cam_csiphy_1_2_2_hwreg.h"
