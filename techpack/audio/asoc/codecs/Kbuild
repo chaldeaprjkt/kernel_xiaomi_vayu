@@ -202,11 +202,15 @@ KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/dsp/Module
 KBUILD_EXTRA_SYMBOLS +=$(OUT)/obj/vendor/qcom/opensource/audio-kernel/soc/Module.symvers
 endif
 
+CDEFINES += -DCONFIG_SND_SOC_HEADSET_2700MV \
+			-DGOOGLE_HOTWORD
+
 ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= wcd934x/
 	obj-y	+= sdm660_cdc/
 	obj-y	+= msm_sdw/
 	obj-y	+= wcd9360/
+	obj-y	+= tas256x/
 	obj-y	+= wcd937x/
 endif
 
@@ -215,6 +219,9 @@ GCOV_PROFILE := y
 endif
 
 # Module information used by KBuild framework
+obj-y += spk-id.o
+spk-id_dlkm-y := spk-id.o
+
 obj-$(CONFIG_WCD9XXX_CODEC_CORE) += wcd_core_dlkm.o
 wcd_core_dlkm-y := $(CORE_OBJS)
 
