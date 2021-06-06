@@ -51,7 +51,9 @@
 #define PINCTRL_STATE_RELEASE		"pmx_ts_release"
 
 #define TOUCH_DISABLE_LPM 1
+#ifdef CONFIG_CPU_BOOST
 #define TOUCH_IRQ_BOOST 2
+#endif
 
 /* ---GPIO number--- */
 #define NVTTOUCH_RST_PIN 980
