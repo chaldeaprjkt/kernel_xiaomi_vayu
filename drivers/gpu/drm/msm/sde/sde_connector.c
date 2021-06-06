@@ -25,7 +25,6 @@
 #include "sde_crtc.h"
 #include "sde_rm.h"
 #include "sde_trace.h"
-#include <drm/drm_notifier.h>
 
 #define BL_NODE_NAME_SIZE 32
 
