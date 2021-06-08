@@ -3,7 +3,6 @@
  *
  * Coypritht (c) 2017 Goodix
  */
-#define DEBUG
 #define pr_fmt(fmt)     "gf_platform: " fmt
 
 #include <linux/delay.h>
@@ -139,4 +138,3 @@ int gf_irq_num(struct gf_dev *gf_dev)
 		return gpio_to_irq(gf_dev->irq_gpio);
 	}
 }
-
