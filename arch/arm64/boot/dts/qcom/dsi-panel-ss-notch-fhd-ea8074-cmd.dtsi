@@ -54,7 +54,6 @@
 			17000 15500 30000 8000 3000>;
 		qcom,mdss-dsi-panel-peak-brightness = <4300000>;
 		qcom,mdss-dsi-panel-blackness-level = <3230>;
-		qcom,dispparam-enabled;
 		qcom,mdss-panel-on-dimming-delay = <120>;
 		//qcom,esd-err-irq-gpio = <&tlmm 52 0x2002>; /* trig-flags: falling-0x0002 rasing-0x0001*/
 		qcom,mdss-dsi-display-timings {
@@ -92,20 +91,6 @@
 						05 01 00 00 78 00 02 10 00];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-doze-hbm-command = [
-				39 00 00 00 00 00 03 F0 5A 5A
-				39 00 00 00 00 00 02 ef b0
-				39 00 00 00 00 00 02 b0 17
-				39 00 00 00 00 00 04 E3 00 00 00
-				39 01 00 00 01 00 02 53 22
-				39 01 00 00 00 00 03 F0 A5 A5];
-				qcom,mdss-dsi-doze-lbm-command = [
-				39 00 00 00 00 00 03 F0 5A 5A
-				39 00 00 00 00 00 02 ef b0
-				39 00 00 00 00 00 02 b0 17
-				39 00 00 00 00 00 04 E3 00 00 00
-				39 01 00 00 01 00 02 53 23
-				39 01 00 00 00 00 03 F0 A5 A5];
 				qcom,mdss-dsi-nolp-command = [
 				05 01 00 00 00 00 02 28 00
 				39 00 00 00 00 00 03 51 00 00
@@ -115,46 +100,7 @@
 				39 00 00 00 00 00 02 53 28
 				39 01 00 00 00 00 03 F0 A5 A5
 				05 01 00 00 00 00 02 29 00];
-				qcom,mdss-dsi-doze-hbm-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-doze-lbm-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-nolp-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-acl-off-command = [39 01 00 00 00 00 02 55 00];
-				qcom,mdss-dsi-dispparam-acl-off-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-acl-l1-command = [39 01 00 00 00 00 02 55 01];/* 50% */
-				qcom,mdss-dsi-dispparam-acl-l1-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-acl-l2-command = [39 01 00 00 00 00 02 55 02];/* 40% */
-				qcom,mdss-dsi-dispparam-acl-l2-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-acl-l3-command = [39 01 00 00 00 00 02 55 03];/* 30% */
-				qcom,mdss-dsi-dispparam-acl-l3-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-hbm-off-command = [39 01 00 00 00 00 02 53 28];
-				qcom,mdss-dsi-dispparam-hbm-off-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-hbm-on-command = [39 01 00 00 00 00 02 53 e8];
-				qcom,mdss-dsi-dispparam-hbm-on-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-hbm-fod-off-command = [39 00 00 00 00 00 02 53 20
-									39 00 00 00 00 00 03 F0 5A 5A
-									39 00 00 00 00 00 03 B2 00 40
-									39 00 00 00 00 00 02 B0 04
-									39 00 00 00 00 00 02 B2 80
-									39 00 00 00 00 00 02 F7 03
-									39 01 00 00 00 00 03 F0 A5 A5];
-				qcom,mdss-dsi-dispparam-hbm-fod-off-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-hbm-fod-on-command = [39 00 00 00 00 00 03 F0 5A 5A
-									39 00 00 00 00 00 03 B2 00 10
-									39 00 00 00 00 00 02 B0 04
-									39 00 00 00 00 00 02 B2 00
-									39 00 00 00 00 00 02 F7 03
-									39 00 00 00 00 00 03 F0 A5 A5
-									39 01 00 00 00 00 02 53 e0];
-				qcom,mdss-dsi-dispparam-hbm-fod-on-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-hbm-fod2norm-command = [39 00 00 00 00 00 03 F0 5A 5A
-									39 00 00 00 00 00 03 B2 00 40
-									39 00 00 00 00 00 02 B0 04
-									39 00 00 00 00 00 02 B2 80
-									39 00 00 00 00 00 02 F7 03
-									39 01 00 00 00 00 03 F0 A5 A5];
-				qcom,mdss-dsi-dispparam-hbm-fod2norm-command-state = "dsi_lp_mode";
-				qcom,mdss-dsi-dispparam-dimmingon-command = [39 01 00 00 01 00 02 53 28];
-				qcom,mdss-dsi-dispparam-dimmingon-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-h-sync-pulse = <0>;
 			};
 		};

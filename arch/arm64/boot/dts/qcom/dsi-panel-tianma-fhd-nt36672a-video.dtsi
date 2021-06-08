@@ -52,7 +52,6 @@
         qcom,mdss-dsi-panel-hdr-enabled;
         qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
         17000 15500 30000 8000 3000>;
-        qcom,dispparam-enabled;
 		qcom,mdss-panel-on-dimming-delay = <120>;
 
         qcom,mdss-dsi-display-timings {
