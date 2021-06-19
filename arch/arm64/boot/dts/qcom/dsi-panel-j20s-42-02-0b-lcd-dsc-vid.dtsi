@@ -60,8 +60,6 @@
 			"dfps_immediate_porch_mode_vfp";
 		qcom,dsi-supported-dfps-list = <120 90 60 50 48 30>;
 
-		mi,is-tddi-flag;
-
 		qcom,mdss-dsi-display-timings {
 			timing@0{
 				qcom,mdss-dsi-panel-framerate = <120>;

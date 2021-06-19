@@ -438,19 +438,12 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
 
-	if (panel->is_tddi_flag) {
-		if (!panel->tddi_doubleclick_flag || panel->panel_dead_flag) {
-			rc = dsi_pwr_enable_regulator(&panel->power_info, true);
-			if (panel->panel_dead_flag)
-				panel->panel_dead_flag = false;
-		}
-	} else {
+	if (!panel->tddi_doubleclick_flag) {
 		rc = dsi_pwr_enable_regulator(&panel->power_info, true);
-	}
-
-	if (rc) {
-		pr_err("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
-		goto exit;
+		if (rc) {
+			pr_err("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
+			goto exit;
+		}
 	}
 
 	rc = dsi_panel_set_pinctrl_state(panel, true);
@@ -490,15 +483,9 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
-	if (panel->is_tddi_flag) {
-		if (!panel->tddi_doubleclick_flag || panel->panel_dead_flag) {
-			if (gpio_is_valid(panel->reset_config.reset_gpio))
-				gpio_set_value(panel->reset_config.reset_gpio, 0);
-		}
-	} else {
-	if (gpio_is_valid(panel->reset_config.reset_gpio))
-		gpio_set_value(panel->reset_config.reset_gpio, 0);
-	}
+	if(!panel->tddi_doubleclick_flag &&
+		gpio_is_valid(panel->reset_config.reset_gpio))
+			gpio_set_value(panel->reset_config.reset_gpio, 0);
 
 	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
 		gpio_set_value(panel->reset_config.lcd_mode_sel_gpio, 0);
@@ -509,13 +496,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		       rc);
 	}
 
-	if (panel->is_tddi_flag) {
-		if(!panel->tddi_doubleclick_flag || panel->panel_dead_flag) {
-	rc = dsi_pwr_enable_regulator(&panel->power_info, false);
-	if (rc)
-		pr_err("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
-		}
-	} else {
+	if(!panel->tddi_doubleclick_flag) {
 		rc = dsi_pwr_enable_regulator(&panel->power_info, false);
 		if (rc)
 			pr_err("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
@@ -3329,31 +3310,6 @@ end:
 	utils->node = panel->panel_of_node;
 }
 
-static int dsi_panel_parse_mi_config(struct dsi_panel *panel,
-				     struct device_node *of_node)
-{
-	int rc = 0;
-	struct dsi_parser_utils *utils;
-
-	if (panel == NULL)
-		return -EINVAL;
-
-	utils = &panel->utils;
-
-	panel->is_tddi_flag = utils->read_bool(of_node,
-								"mi,is-tddi-flag");
-	if (panel->is_tddi_flag) {
-		pr_info("panel is tddi.\n");
-	} else {
-		pr_info("panel is not tddi.\n");
-	}
-
-	panel->panel_dead_flag = false;
-	panel->tddi_doubleclick_flag = false;
-
-	return rc;
-}
-
 struct dsi_panel *dsi_panel_get(struct device *parent,
 				struct device_node *of_node,
 				struct device_node *parser_node,
@@ -3464,13 +3420,11 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		pr_debug("failed to parse esd config, rc=%d\n", rc);
 
-	rc = dsi_panel_parse_mi_config(panel, of_node);
-	if (rc)
-		pr_err("failed to parse mi config, rc=%d\n", rc);
-
 	g_panel = panel;
 
 	panel->power_mode = SDE_MODE_DPMS_OFF;
+	panel->tddi_doubleclick_flag = false;
+
 	drm_panel_init(&panel->drm_panel);
 	mutex_init(&panel->panel_lock);
 
