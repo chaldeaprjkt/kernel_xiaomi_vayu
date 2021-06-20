@@ -1101,7 +1101,7 @@ static void fs_sync_func(struct work_struct *work)
 	u32 key_status;
 	uint pon_rt_sts;
 	u8 sync_counter;
-	dev_info(pon->dev, "sys_sync:fs_sync_func:times:%d\n", pon->fs_sync_counter);
+	dev_dbg(pon->dev, "sys_sync:fs_sync_func:times:%d\n", pon->fs_sync_counter);
 	if (pon->fs_sync_counter == 0)
 	{
 		rc = regmap_read(pon->regmap, QPNP_PON_RT_STS(pon), &pon_rt_sts);
