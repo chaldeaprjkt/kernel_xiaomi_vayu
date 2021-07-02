@@ -265,6 +265,18 @@ static int led_classdev_next_name(const char *init_name, char *name,
 	return i;
 }
 
+#ifdef CONFIG_MACH_XIAOMI_VAYU
+static bool offline_charging = false;
+static int __init early_mode_offline_charging(char *mode)
+{
+	if (mode && !strcmp(mode, "charger"))
+		offline_charging = true;
+
+	return 0;
+}
+early_param("androidboot.mode", early_mode_offline_charging);
+#endif
+
 /**
  * of_led_classdev_register - register a new object of led_classdev class.
  *
@@ -315,6 +327,12 @@ int of_led_classdev_register(struct device *parent, struct device_node *np,
 
 	if (!led_cdev->max_brightness)
 		led_cdev->max_brightness = LED_FULL;
+
+#ifdef CONFIG_MACH_XIAOMI_VAYU
+	if (!strcmp(led_cdev->name, "white") && offline_charging) {
+		led_cdev->usr_brightness_req = LED_FULL;
+	}
+#endif
 
 	led_update_brightness(led_cdev);
 
