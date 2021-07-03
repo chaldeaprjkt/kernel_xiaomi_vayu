@@ -130,3 +130,6 @@ kernel/configs/android-*.cfg
 #Ignoring Android.bp link file
 #
 Android.bp
+
+# Builder data for LINUX_COMPILE_BY/HOST replacement on sandboxed ABS
+.builderdata

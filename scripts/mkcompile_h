@@ -55,6 +55,14 @@ else
 	LINUX_COMPILE_HOST=$KBUILD_BUILD_HOST
 fi
 
+# Reading LINUX_COMPILE_BY/HOST from $src/.builderdata
+# format : u@h
+if [ -e $srctree/.builderdata ]; then
+	builder=(`grep -Ev '^#' $srctree/.builderdata | tail -n 1 | tr '@' '\n'`)
+	LINUX_COMPILE_BY=${builder[0]}
+	LINUX_COMPILE_HOST=${builder[1]}
+fi
+
 UTS_VERSION="#$VERSION"
 CONFIG_FLAGS=""
 if [ -n "$SMP" ] ; then CONFIG_FLAGS="SMP"; fi
