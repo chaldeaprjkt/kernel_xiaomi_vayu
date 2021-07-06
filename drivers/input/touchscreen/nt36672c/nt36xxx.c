@@ -95,9 +95,6 @@ extern void dsi_panel_doubleclick_enable(bool on);
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
 static int32_t nvt_check_palm(uint8_t input_id, uint8_t *data);
 #endif
-#ifdef CONFIG_CPU_BOOST
-extern void touch_irq_boost(void);
-#endif
 extern void lpm_disable_for_input(bool on);
 uint32_t ENG_RST_ADDR  = 0x7FFF80;
 uint32_t SWRST_N8_ADDR = 0; /* read from dtsi */
@@ -1400,10 +1397,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	if (bTouchIsAwake == 0) {
 		pm_wakeup_event(&ts->input_dev->dev, 5000);
 	}
-#endif
-#ifdef CONFIG_CPU_BOOST
-	if (ts->debug_flag == TOUCH_IRQ_BOOST)
-		touch_irq_boost();
 #endif
 	mutex_lock(&ts->lock);
 	if (ts->debug_flag >= TOUCH_DISABLE_LPM)
