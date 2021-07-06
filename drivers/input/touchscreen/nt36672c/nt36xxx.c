@@ -2172,39 +2172,6 @@ static int tpdbg_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static ssize_t  nvt_touch_test_write(struct file *file, const char __user *buf,
-		size_t count, loff_t *pos){
-	int retval = -1;
-	uint8_t cmd[8];
-	if (copy_from_user(cmd, buf, count)) {
-		retval = -EFAULT;
-		goto out;
-	}
-	switch(cmd[0]) {
-		case '0':
-			ts->debug_flag = 0;
-			break;
-		case '1':
-			ts->debug_flag = 1;
-			break;
-		case '2':
-			ts->debug_flag = 2;
-			break;
-		default:
-			NVT_LOG("%s invalid input cmd, set default value\n", __func__);
-			ts->debug_flag = 2;
-	}
-	NVT_LOG("%s set touch boost debug flag to %d\n", __func__, ts->debug_flag);
-	retval = count;
-out:
-	return retval;
-}
-
-static const struct file_operations nvt_touch_test_fops = {
-	.owner = THIS_MODULE,
-	.write = nvt_touch_test_write,
-};
-
 static const struct file_operations tpdbg_ops = {
 	.owner = THIS_MODULE,
 	.open = tpdbg_open,
@@ -2329,7 +2296,6 @@ static int32_t nvt_ts_probe(struct platform_device *pdev)
 	ts->client->bits_per_word = 8;
 	ts->client->mode = SPI_MODE_0;
 	ts->client->max_speed_hz = ts->spi_max_freq;
-	ts->debug_flag = 2;
 
 	ret = spi_setup(ts->client);
 	if (ret < 0) {
@@ -2590,7 +2556,6 @@ static int32_t nvt_ts_probe(struct platform_device *pdev)
 	ts->debugfs = debugfs_create_dir("tp_debug", NULL);
 	if (ts->debugfs) {
 		debugfs_create_file("switch_state", 0660, ts->debugfs, ts, &tpdbg_ops);
-		debugfs_create_file("touch_boost", 0660, ts->debugfs, ts, &nvt_touch_test_fops);
 	}
 #endif
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE

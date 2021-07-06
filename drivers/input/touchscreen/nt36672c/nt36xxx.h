@@ -201,7 +201,6 @@ struct nvt_ts_data {
 	bool dev_pm_suspend;
 	struct completion dev_pm_suspend_completion;
 	bool palm_sensor_switch;
-	uint8_t debug_flag;
 };
 
 #if NVT_TOUCH_PROC
