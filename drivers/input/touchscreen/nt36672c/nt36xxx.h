@@ -50,8 +50,6 @@
 #define PINCTRL_STATE_SUSPEND		"pmx_ts_suspend"
 #define PINCTRL_STATE_RELEASE		"pmx_ts_release"
 
-#define TOUCH_DISABLE_LPM 1
-
 /* ---GPIO number--- */
 #define NVTTOUCH_RST_PIN 980
 #define NVTTOUCH_INT_PIN 943
