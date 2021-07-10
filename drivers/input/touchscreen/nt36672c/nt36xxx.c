@@ -140,7 +140,12 @@ const struct mtk_chip_config spi_ctrdata = {
 static ssize_t double_tap_show(struct kobject *kobj,
                                struct kobj_attribute *attr, char *buf)
 {
-    return sprintf(buf, "%d\n", ts->db_wakeup);
+	/* when db_wakeup stored while screen is off, it'll postponed by
+	 * nvt_switch_mode_work on gesture_command_delayed so it'll be
+	 * applied on next unblank to mitigate the dsi-staging hacks
+	 */
+    return sprintf(buf, "%d\n",
+		ts->gesture_command_delayed < 0 ? ts->db_wakeup : ts->gesture_command_delayed);
 }
 
 static ssize_t double_tap_store(struct kobject *kobj,
@@ -154,6 +159,7 @@ static ssize_t double_tap_store(struct kobject *kobj,
     return -EINVAL;
 
     ts->db_wakeup = !!val;
+    schedule_work(&ts->switch_mode_work);
     return count;
 }
 
