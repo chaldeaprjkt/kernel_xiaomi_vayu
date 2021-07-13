@@ -590,7 +590,7 @@ int tas256x_set_samplerate(struct tas256x_priv *p_tas256x,
 			TAS256X_TDMCONFIGURATIONREG0_SAMPRATE31_176_4_192KHZ);
 		break;
 	default:
-		pr_info("%s %s, unsupported sample rate, %d\n",
+		pr_debug("%s %s, unsupported sample rate, %d\n",
 			 LOG_TAG, __func__, samplerate);
 	}
 
@@ -696,7 +696,7 @@ int tas256x_rx_set_bitwidth(struct tas256x_priv *p_tas256x,
 		break;
 
 	default:
-		pr_info("%s Not supported params format\n",  LOG_TAG);
+		pr_debug("%s Not supported params format\n",  LOG_TAG);
 		break;
 	}
 
@@ -761,13 +761,13 @@ int tas256x_icn_enable(struct tas256x_priv *p_tas256x, int enable, int ch)
 			TAS256X_ICN_SW_REG,
 			TAS256X_ICN_SW_MASK,
 			TAS256X_ICN_SW_ENABLE);
-		pr_info("%s %s: ICN Enable!\n",  LOG_TAG, __func__);
+		pr_debug("%s %s: ICN Enable!\n",  LOG_TAG, __func__);
 	} else { /*Disable*/
 		p_tas256x->update_bits(p_tas256x, ch,
 			TAS256X_ICN_SW_REG,
 			TAS256X_ICN_SW_MASK,
 			TAS256X_ICN_SW_DISABLE);
-		pr_info("%s %s: ICN Disable!\n",  LOG_TAG, __func__);
+		pr_debug("%s %s: ICN Disable!\n",  LOG_TAG, __func__);
 	}
 
 	return n_result;
@@ -778,7 +778,7 @@ int tas256x_icn_data(struct tas256x_priv *p_tas256x, int ch)
 {
 	int n_result = 0;
 
-	pr_info("%s set ICN to -80dB\n", LOG_TAG);
+	pr_debug("%s set ICN to -80dB\n", LOG_TAG);
 	n_result = p_tas256x->bulk_write(p_tas256x, ch,
 		TAS256X_ICN_THRESHOLD_REG,
 		p_icn_threshold,

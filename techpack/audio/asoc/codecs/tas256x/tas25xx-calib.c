@@ -66,7 +66,7 @@ static int smartamp_params_ctrl(uint8_t *input, u8 dir, u8 count)
 
 	index = (ppacket->page - 1) * 30 + (ppacket->offset - 8) / 4;
 	special_index = TAS_SA_IS_SPL_IDX(index);
-	pr_info("TI-SmartPA: %s: index = %d", __func__, index);
+	pr_debug("TI-SmartPA: %s: index = %d", __func__, index);
 	if (special_index == 0) {
 		if ((index < 0 || index > MAX_DSP_PARAM_INDEX)) {
 			pr_err("TI-SmartPA: %s: invalid index !\n", __func__);
@@ -74,7 +74,7 @@ static int smartamp_params_ctrl(uint8_t *input, u8 dir, u8 count)
 			return -EINVAL;
 		}
 	}
-	pr_info("TI-SmartPA: %s: Valid Index. special = %s\n", __func__, special_index ? "Yes" : "No");
+	pr_debug("TI-SmartPA: %s: Valid Index. special = %s\n", __func__, special_index ? "Yes" : "No");
 
 	/* speakers are differentiated by slave ids */
 	if (ppacket->slave_id == SLAVE1) {
@@ -110,7 +110,7 @@ static int smartamp_params_ctrl(uint8_t *input, u8 dir, u8 count)
 				dir == TAS_GET_PARAM ? "get" : "set",
 				ppacket->slave_id, ret);
 	else
-		pr_info("TI-SmartPA: %s: Algo control returned %d\n",
+		pr_debug("TI-SmartPA: %s: Algo control returned %d\n",
 			__func__, ret);
 
 	if (dir == TAS_GET_PARAM) {

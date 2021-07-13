@@ -588,7 +588,7 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 #ifdef CONFIG_TAS25XX_ALGO
 			{
 	                u32 *payload32 = data->payload;
-	                pr_info ("TI-SmartPA: payload1 = 0x%x, 0x%x", payload32[0], payload32[1]);
+	                pr_debug("TI-SmartPA: payload1 = 0x%x, 0x%x", payload32[0], payload32[1]);
 
 					if((payload32[1] == AFE_SMARTAMP_MODULE_RX) ||
 					   (payload32[1] == AFE_SMARTAMP_MODULE_TX))
@@ -5196,7 +5196,7 @@ int afe_tas_smartamp_get_calib_data(uint32_t module_id, uint32_t param_id,
 		goto fail_cmd;
 	}
 
-	pr_info("[TI-SmartPA:%s] module id : 0x%x ", __func__, module_id);
+	pr_debug("TI-SmartPA:%s] module id : 0x%x ", __func__, module_id);
 	if (module_id == AFE_SMARTAMP_MODULE_RX) {
 		port = TAS_RX_PORT;
 	} else if (module_id == AFE_SMARTAMP_MODULE_TX) {
@@ -5236,13 +5236,13 @@ int afe_tas_smartamp_set_calib_data(uint32_t module_id, uint32_t param_id,
 	u8 *packed_param_data = NULL;
 	u32 packed_param_size = 0;
 	u32 single_param_size = 0;
-	pr_info("[TI-SmartPA:%s] length: %d\n", __func__, length);
+	pr_debug("TI-SmartPA:%s] length: %d\n", __func__, length);
 	if (!data || (length < 0)) {
 		pr_err("[TI-SmartPA:%s] Invalid params\n", __func__);
 		return ret;
 	}
 
-	pr_info("[TI-SmartPA:%s] module id : 0x%x \n", __func__, module_id);
+	pr_debug("TI-SmartPA:%s] module id : 0x%x \n", __func__, module_id);
 	if (module_id == AFE_SMARTAMP_MODULE_RX) {
 		port = TAS_RX_PORT;
 	} else if (module_id == AFE_SMARTAMP_MODULE_TX) {
@@ -5399,7 +5399,7 @@ int afe_tas_smartamp_get_calib_data(uint32_t module_id, uint32_t param_id,
 		ret = -EINVAL;
 		memcpy(data, &this_afe.tas_calib_data.res_cfg, length);
 	}
-	pr_info("[TI-SmartPA: %s] ret=%d", __func__, ret);
+	pr_debug("TI-SmartPA: %s] ret=%d", __func__, ret);
 
 fail_cmd:
 	return ret;
@@ -5498,7 +5498,7 @@ int afe_tas_smartamp_set_calib_data(uint32_t module_id, uint32_t param_id,
         ret = 0;
 
 fail_cmd:
-	pr_info("[TI-SmartPA %s]: config->pdata.param_id %x status %d\n",
+	pr_debug("TI-SmartPA %s]: config->pdata.param_id %x status %d\n",
 	__func__, config->pdata.param_id, ret);
 	return ret;
 

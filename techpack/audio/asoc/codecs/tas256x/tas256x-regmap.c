@@ -1278,7 +1278,7 @@ static void tas256x_hw_reset(struct tas256x_priv *p_tas256x)
 	}
 	msleep(20);
 
-	dev_info(p_tas256x->dev, "reset gpio up !!\n");
+	dev_dbg(p_tas256x->dev, "reset gpio up !!\n");
 }
 
 void tas256x_enable_irq(struct tas256x_priv *p_tas256x, bool enable)
@@ -1300,7 +1300,7 @@ void tas256x_enable_irq(struct tas256x_priv *p_tas256x, bool enable)
 						enable_irq(
 							p_tas256x->devs[i]->mn_irq);
 					else
-						dev_info(p_tas256x->dev,
+						dev_dbg(p_tas256x->dev,
 							"### irq already enabled");
 				} else {
 					enable_irq(p_tas256x->devs[i]->mn_irq);
@@ -1332,7 +1332,7 @@ static void irq_work_routine(struct work_struct *work)
 	int irqreg, irqreg2, i, chnTemp = 0;
 	enum channel chn = channel_left;
 
-	dev_info(p_tas256x->dev, "%s\n", __func__);
+	dev_dbg(p_tas256x->dev, "%s\n", __func__);
 #ifdef CONFIG_TAS256X_CODEC
 	mutex_lock(&p_tas256x->codec_lock);
 #endif
@@ -1342,12 +1342,12 @@ static void irq_work_routine(struct work_struct *work)
 		goto reload;
 
 	if (p_tas256x->mb_runtime_suspend) {
-		dev_info(p_tas256x->dev, "%s, Runtime Suspended\n", __func__);
+		dev_dbg(p_tas256x->dev, "%s, Runtime Suspended\n", __func__);
 		goto end;
 	}
 
 	if (p_tas256x->mn_power_state == TAS256X_POWER_SHUTDOWN) {
-		dev_info(p_tas256x->dev, "%s, device not powered\n", __func__);
+		dev_dbg(p_tas256x->dev, "%s, device not powered\n", __func__);
 		goto end;
 	}
 
@@ -1424,11 +1424,11 @@ static void irq_work_routine(struct work_struct *work)
 
 			tas256x_interrupt_read(p_tas256x,
 				&irqreg, &irqreg2, channel_left);
-			dev_info(p_tas256x->dev, "IRQ reg is: %s %d, %d\n",
+			dev_dbg(p_tas256x->dev, "IRQ reg is: %s %d, %d\n",
 				__func__, irqreg, __LINE__);
 			tas256x_interrupt_read(p_tas256x,
 				&irqreg, &irqreg2, channel_right);
-			dev_info(p_tas256x->dev, "IRQ reg is: %s %d, %d\n",
+			dev_dbg(p_tas256x->dev, "IRQ reg is: %s %d, %d\n",
 				__func__, irqreg, __LINE__);
 
 
@@ -1479,15 +1479,15 @@ static void init_work_routine(struct work_struct *work)
 	int n_result = 0;
 	int irqreg = 0, irqreg2 = 0;
 
-	pr_info("%s:\n", __func__);
+	pr_debug("%s:\n", __func__);
 
 	tas256x_interrupt_read(p_tas256x,
 		&irqreg, &irqreg2, channel_left);
-	dev_info(p_tas256x->dev, "IRQ reg is: %s %d, %d\n",
+	dev_dbg(p_tas256x->dev, "IRQ reg is: %s %d, %d\n",
 		__func__, irqreg, __LINE__);
 	tas256x_interrupt_read(p_tas256x,
 		&irqreg, &irqreg2, channel_right);
-	dev_info(p_tas256x->dev, "IRQ reg is: %s %d, %d\n",
+	dev_dbg(p_tas256x->dev, "IRQ reg is: %s %d, %d\n",
 		__func__, irqreg, __LINE__);
 
 	/* Clear latched IRQ before power on */
@@ -1701,8 +1701,8 @@ static int tas256x_i2c_probe(struct i2c_client *p_client,
 	int n_result = 0;
 	int i = 0;
 
-	dev_info(&p_client->dev, "Driver Tag: %s\n", TAS256X_DRIVER_TAG);
-	dev_info(&p_client->dev, "%s enter\n", __func__);
+	dev_dbg(&p_client->dev, "Driver Tag: %s\n", TAS256X_DRIVER_TAG);
+	dev_dbg(&p_client->dev, "%s enter\n", __func__);
 
 	p_tas256x = devm_kzalloc(&p_client->dev,
 		sizeof(struct tas256x_priv), GFP_KERNEL);
@@ -1764,14 +1764,14 @@ static int tas256x_i2c_probe(struct i2c_client *p_client,
 
 	tas256x_hw_reset(p_tas256x);
 
-	dev_info(&p_client->dev, "Before SW reset\n");
+	dev_dbg(&p_client->dev, "Before SW reset\n");
 	/* Reset the chip */
 	n_result = tas56x_software_reset(p_tas256x, channel_both);
 	if (n_result < 0) {
 		dev_err(&p_client->dev, "I2c fail, %d\n", n_result);
 		goto err;
 	}
-	dev_info(&p_client->dev, "After SW reset\n");
+	dev_dbg(&p_client->dev, "After SW reset\n");
 
 	for (i = 0; i < p_tas256x->mn_channels; i++) {
 		n_result = tas56x_get_chipid(p_tas256x,
@@ -1828,7 +1828,7 @@ static int tas256x_i2c_probe(struct i2c_client *p_client,
 
 			p_tas256x->devs[i]->mn_irq =
 				gpio_to_irq(p_tas256x->devs[i]->mn_irq_gpio);
-			dev_info(p_tas256x->dev, "irq = %d\n",
+			dev_dbg(p_tas256x->dev, "irq = %d\n",
 				p_tas256x->devs[i]->mn_irq);
 
 			n_result = request_threaded_irq(
@@ -1886,7 +1886,7 @@ static int tas256x_i2c_remove(struct i2c_client *p_client)
 	int i = 0;
 	struct tas256x_priv *p_tas256x = i2c_get_clientdata(p_client);
 
-	dev_info(p_tas256x->dev, "%s\n", __func__);
+	dev_dbg(p_tas256x->dev, "%s\n", __func__);
 
 #ifdef CONFIG_TAS256X_CODEC
 	tas256x_deregister_codec(p_tas256x);
