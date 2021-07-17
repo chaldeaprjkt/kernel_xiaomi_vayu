@@ -42,11 +42,6 @@ static struct dsi_display_mode_priv_info default_priv_info = {
 	.dsc_enabled = false,
 };
 
-
-#define WAIT_RESUME_TIMEOUT 200
-
-static struct wakeup_source prim_panel_wakelock;
-
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
 {
@@ -396,10 +391,8 @@ static void dsi_bridge_post_disable_work(struct work_struct *work)
 	if (!bridge)
 		return;
 
-	if (atomic_read(&bridge->display_active)) {
+	if (atomic_read(&bridge->display_active))
 		dsi_bridge_post_disable(&bridge->base);
-		__pm_relax(&prim_panel_wakelock);
-	}
 }
 
 static void dsi_bridge_mode_set(struct drm_bridge *bridge,
@@ -1140,7 +1133,6 @@ struct dsi_bridge *dsi_drm_bridge_init(struct dsi_display *display,
 	mutex_init(&encoder->bridge->lock);
 
 	atomic_set(&resume_pending, 0);
-	wakeup_source_init(&prim_panel_wakelock, "prim_panel_wakelock");
 	atomic_set(&bridge->display_active, false);
 	init_waitqueue_head(&resume_wait_q);
 	INIT_DELAYED_WORK(&bridge->pd_work, dsi_bridge_post_disable_work);
@@ -1160,7 +1152,6 @@ void dsi_drm_bridge_cleanup(struct dsi_bridge *bridge)
 	if (bridge) {
 		atomic_set(&bridge->display_active, false);
 		cancel_delayed_work_sync(&bridge->pd_work);
-		wakeup_source_trash(&prim_panel_wakelock);
 	}
 
 	kfree(bridge);
