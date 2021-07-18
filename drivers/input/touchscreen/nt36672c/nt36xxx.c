@@ -1394,9 +1394,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	uint32_t input_w = 0;
 	uint32_t input_p = 0;
 	uint8_t input_id = 0;
-#if MT_PROTOCOL_B
 	uint8_t press_id[TOUCH_MAX_FINGER_NUM] = {0};
-#endif /* MT_PROTOCOL_B */
 	int32_t i = 0;
 	int32_t finger_cnt = 0;
 
@@ -1498,34 +1496,18 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			}
 			if (input_p == 0)
 				input_p = 1;
-
-#if MT_PROTOCOL_B
 			press_id[input_id - 1] = 1;
 			input_mt_slot(ts->input_dev, input_id - 1);
 			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
 			input_report_key(ts->input_dev, BTN_TOUCH, 1);
 			input_report_key(ts->input_dev, BTN_TOOL_FINGER, 1);
-#else /* MT_PROTOCOL_B */
-			input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, input_id - 1);
-			input_report_key(ts->input_dev, BTN_TOUCH, 1);
-#endif /* MT_PROTOCOL_B */
-
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_X, input_x);
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, input_y);
-			/*input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, input_w);*/
-			/*input_report_abs(ts->input_dev, ABS_MT_PRESSURE, input_p);*/
-
-#if MT_PROTOCOL_B
-#else /* MT_PROTOCOL_B */
-			input_mt_sync(ts->input_dev);
-#endif /* MT_PROTOCOL_B */
-
 			set_bit(input_id - 1, ts->slot_map);
 			finger_cnt++;
 		}
 	}
 
-#if MT_PROTOCOL_B
 	for (i = 0; i < ts->max_touch_num; i++) {
 		if (press_id[i] != 1) {
 			input_mt_slot(ts->input_dev, i);
@@ -1539,13 +1521,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			clear_bit(i, ts->slot_map);
 		}
 	}
-	/* input_report_key(ts->input_dev, BTN_TOUCH, (finger_cnt > 0)); */
-#else /* MT_PROTOCOL_B */
-	if (finger_cnt == 0) {
-		input_report_key(ts->input_dev, BTN_TOUCH, 0);
-		input_mt_sync(ts->input_dev);
-	}
-#endif /* MT_PROTOCOL_B */
 
 	input_sync(ts->input_dev);
 
@@ -2364,30 +2339,16 @@ static int32_t nvt_ts_probe(struct platform_device *pdev)
 	}
 
 	ts->max_touch_num = TOUCH_MAX_FINGER_NUM;
-
-
 	ts->int_trigger_type = INT_TRIGGER_TYPE;
-
 	ts->input_dev->evbit[0] = BIT_MASK(EV_SYN) | BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS) ;
-	__set_bit(BTN_TOUCH, ts->input_dev->keybit);
-	__set_bit(BTN_TOOL_FINGER, ts->input_dev->keybit);
 	ts->input_dev->propbit[0] = BIT(INPUT_PROP_DIRECT);
 
-#if MT_PROTOCOL_B
+	__set_bit(BTN_TOUCH, ts->input_dev->keybit);
+	__set_bit(BTN_TOOL_FINGER, ts->input_dev->keybit);
+
 	input_mt_init_slots(ts->input_dev, ts->max_touch_num, 0);
-#endif
-
-#if TOUCH_MAX_FINGER_NUM > 1
-	/*input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);*/
-
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max - 1, 0, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max - 1, 0, 0);
-#if MT_PROTOCOL_B
-	/* no need to set ABS_MT_TRACKING_ID, input_mt_init_slots() already set it */
-#else
-	input_set_abs_params(ts->input_dev, ABS_MT_TRACKING_ID, 0, ts->max_touch_num, 0, 0);
-#endif
-#endif
 
 #if WAKEUP_GESTURE
 	input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP);
@@ -2790,10 +2751,8 @@ return:
 static int32_t nvt_ts_suspend(struct device *dev)
 {
 	uint8_t buf[4] = {0};
-#if MT_PROTOCOL_B
-	uint32_t i = 0;
-#endif
-	int ret = 0;
+	int i, ret = 0;
+
 	if (ts->ic_state < NVT_IC_RESUME_IN) {
 		NVT_LOG("Touch is already suspend\n");
 		return 0;
@@ -2851,19 +2810,12 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	mdelay(10);
 	mutex_unlock(&ts->lock);
 	/* release all touches */
-#if MT_PROTOCOL_B
 	for (i = 0; i < ts->max_touch_num; i++) {
 		input_mt_slot(ts->input_dev, i);
-		/*input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);*/
-		input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
 		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
 	}
-#endif
 	input_report_key(ts->input_dev, BTN_TOOL_FINGER, 0);
 	input_report_key(ts->input_dev, BTN_TOUCH, 0);
-#if !MT_PROTOCOL_B
-	input_mt_sync(ts->input_dev);
-#endif
 	input_sync(ts->input_dev);
 
 	msleep(50);
