@@ -28,8 +28,6 @@
 
 #include "nt36xxx.h"
 
-#if BOOT_UPDATE_FIRMWARE
-
 #define SIZE_4KB 4096
 #define FLASH_SECTOR_SIZE SIZE_4KB
 #define FW_BIN_VER_OFFSET (fw_need_write_size - SIZE_4KB)
@@ -1121,16 +1119,8 @@ void Boot_Update_Firmware(struct work_struct *work)
 {
 	nvt_match_fw();
 	mutex_lock(&ts->lock);
-	if (nvt_get_dbgfw_status()) {
-		if (nvt_update_firmware(DEFAULT_DEBUG_FW_NAME) < 0) {
-			NVT_ERR("use built-in fw");
-			nvt_update_firmware(ts->fw_name);
-		}
-	} else {
-		nvt_update_firmware(ts->fw_name);
-	}
+	nvt_update_firmware(ts->fw_name);
 	nvt_get_fw_info();
 	mutex_unlock(&ts->lock);
 	pm_relax(&ts->pdev->dev);
 }
-#endif /* BOOT_UPDATE_FIRMWARE */

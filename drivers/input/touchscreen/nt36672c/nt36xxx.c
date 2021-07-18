@@ -71,11 +71,9 @@ extern void nvt_extra_proc_deinit(void);
 
 struct nvt_ts_data *ts;
 
-#if BOOT_UPDATE_FIRMWARE
 static struct workqueue_struct *nvt_fwu_wq;
 static struct workqueue_struct *nvt_lockdown_wq;
 extern void Boot_Update_Firmware(struct work_struct *work);
-#endif
 
 #ifdef CONFIG_DRM
 static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
@@ -1203,16 +1201,6 @@ static void nvt_gpio_deconfig(struct nvt_ts_data *ts)
 #endif
 }
 
-void nvt_set_dbgfw_status(bool enable)
-{
-	ts->fw_debug = enable;
-}
-
-bool nvt_get_dbgfw_status(void)
-{
-	return ts->fw_debug;
-}
-
 #if NVT_TOUCH_ESD_PROTECT
 void nvt_esd_check_enable(uint8_t enable)
 {
@@ -1247,19 +1235,9 @@ static void nvt_esd_check_func(struct work_struct *work)
 	if ((timer > NVT_TOUCH_ESD_CHECK_PERIOD) && esd_check) {
 		mutex_lock(&ts->lock);
 		NVT_LOG("do ESD recovery, timer = %d, retry = %d\n", timer, esd_retry);
-		/* do esd recovery, reload fw */
-		if (nvt_get_dbgfw_status()) {
-			if (nvt_update_firmware(DEFAULT_DEBUG_FW_NAME) < 0) {
-				NVT_ERR("use built-in fw");
-				nvt_update_firmware(ts->fw_name);
-			}
-		} else {
-			nvt_update_firmware(ts->fw_name);
-		}
+		nvt_update_firmware(ts->fw_name);
 		mutex_unlock(&ts->lock);
-		/* update interrupt timer */
 		irq_timer = jiffies;
-		/* update esd_retry counter */
 		esd_retry++;
 	}
 
@@ -2040,10 +2018,7 @@ static ssize_t tpdbg_write(struct file *file, const char __user *buf,
 		tpdbg_suspend(ts_core, true);
 	else if (!strncmp(cmd, "tp-suspend-off", 14))
 		tpdbg_suspend(ts_core, false);
-	else if (!strncmp(cmd, "fw-debug-on", 11))
-		nvt_set_dbgfw_status(true);
-	else if (!strncmp(cmd, "fw-debug-off", 12))
-		nvt_set_dbgfw_status(false);
+
 out:
 	kfree(cmd);
 
@@ -2315,7 +2290,6 @@ static int32_t nvt_ts_probe(struct platform_device *pdev)
 	ts->gesture_command_delayed = -1;
 	init_completion(&ts->dev_pm_suspend_completion);
 
-#if BOOT_UPDATE_FIRMWARE
 	nvt_fwu_wq = alloc_workqueue("nvt_fwu_wq", WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
 	if (!nvt_fwu_wq) {
 		NVT_ERR("nvt_fwu_wq create workqueue failed\n");
@@ -2325,7 +2299,6 @@ static int32_t nvt_ts_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
 	/* please make sure boot update start after display reset(RESX) sequence */
 	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(10000));
-#endif
 
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);
 #if NVT_TOUCH_ESD_PROTECT
@@ -2459,7 +2432,6 @@ err_flash_proc_init_failed:
 	}
 err_create_nvt_esd_check_wq_failed:
 #endif
-#if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
 		destroy_workqueue(nvt_fwu_wq);
@@ -2471,7 +2443,6 @@ err_create_nvt_fwu_wq_failed:
 		destroy_workqueue(nvt_lockdown_wq);
 		nvt_lockdown_wq = NULL;
 	}
-#endif
 err_create_nvt_lockdown_wq_failed:
 	pm_relax(&ts->pdev->dev);
 #if WAKEUP_GESTURE
@@ -2545,13 +2516,11 @@ static int32_t nvt_ts_remove(struct platform_device *pdev)
 	}
 #endif
 
-#if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
-#endif
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 0);
@@ -2733,13 +2702,9 @@ static int32_t nvt_ts_resume(struct device *dev)
 		NVT_LOG("Touch is already resume\n");
 #if NVT_TOUCH_WDT_RECOVERY
 		mutex_lock(&ts->lock);
-		if (nvt_get_dbgfw_status()) {
-			ret = nvt_update_firmware(DEFAULT_DEBUG_FW_NAME);
-		} else {
-			ret = nvt_update_firmware(ts->fw_name);
-		}
+		ret = nvt_update_firmware(ts->fw_name);
 		mutex_unlock(&ts->lock);
-#endif /* #if NVT_TOUCH_WDT_RECOVERY */
+#endif
 		goto Exit;
 	}
 
@@ -2752,15 +2717,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 #if NVT_TOUCH_SUPPORT_HW_RST
 	gpio_set_value(ts->reset_gpio, 1);
 #endif
-	if (nvt_get_dbgfw_status()) {
-		ret = nvt_update_firmware(DEFAULT_DEBUG_FW_NAME);
-		if (ret < 0) {
-			NVT_ERR("use built-in fw");
-			ret = nvt_update_firmware(ts->fw_name);
-		}
-	} else {
-		ret = nvt_update_firmware(ts->fw_name);
-	}
+	ret = nvt_update_firmware(ts->fw_name);
 	if (ret)
 		NVT_ERR("download firmware failed\n");
 	nvt_check_fw_reset_state(RESET_STATE_REK);
