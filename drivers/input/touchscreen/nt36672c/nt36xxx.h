@@ -190,8 +190,6 @@ struct nvt_ts_data {
 	const u8 *mp_name;
 	uint32_t spi_max_freq;
 	struct attribute_group *attrs;
-	/*bit map indicate which slot(0~9) has been used*/
-	unsigned long slot_map[BITS_TO_LONGS(10)];
 	bool fw_debug;
 #ifdef CONFIG_TOUCHSCREEN_NVT_DEBUG_FS
 	struct dentry *debugfs;
