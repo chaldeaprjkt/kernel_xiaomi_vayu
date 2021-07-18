@@ -99,7 +99,7 @@ static int32_t nvt_ts_resume(struct device *dev);
 extern int dsi_panel_lockdown_info_read(unsigned char *plockdowninfo);
 extern void dsi_panel_doubleclick_enable(bool on);
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-static int32_t nvt_check_palm(uint8_t input_id, uint8_t *data);
+static int8_t nvt_check_palm(uint8_t *data);
 #endif
 uint32_t ENG_RST_ADDR  = 0x7FFF80;
 uint32_t SWRST_N8_ADDR = 0; /* read from dtsi */
@@ -1456,9 +1456,8 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-	input_id = (uint8_t)(point_data[1] >> 3);
-	if (nvt_check_palm(input_id, point_data)) {
-		goto XFER_ERROR; /* to skip point data parsing */
+	if (nvt_check_palm(point_data)) {
+		goto XFER_ERROR;
 	}
 #endif
 
@@ -1679,32 +1678,20 @@ static void nvt_switch_mode_work(struct work_struct *work)
 }
 
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-
-static struct xiaomi_touch_interface xiaomi_touch_interfaces;
-
-int32_t nvt_check_palm(uint8_t input_id, uint8_t *data)
+static int8_t nvt_check_palm(uint8_t *data)
 {
-	int32_t ret = 0;
-	uint8_t func_type = data[2];
-	uint8_t palm_state = data[3];
+	uint8_t type = data[2];
+	uint8_t id = data[3];
+	uint8_t mode = data[1] >> 3;
 
-	if ((input_id == DATA_PROTOCOL) && (func_type == FUNCPAGE_PALM)) {
-		ret = palm_state;
-		if (palm_state == PACKET_PALM_ON) {
-			NVT_LOG("get packet palm on event.\n");
-			update_palm_sensor_value(1);
-		} else if (palm_state == PACKET_PALM_OFF) {
-			NVT_LOG("get packet palm off event.\n");
-			update_palm_sensor_value(0);
-		} else {
-			NVT_ERR("invalid palm state %d!\n", palm_state);
-			ret = -1;
-		}
-	} else {
-		ret = 0;
-	}
+	if (mode != DATA_PROTOCOL || type != FUNCPAGE_PALM)
+		return 0;
 
-	return ret;
+	if (id == PACKET_PALM_ON || id == PACKET_PALM_OFF)
+		return -1;
+
+	update_palm_sensor_value(id == PACKET_PALM_ON);
+	return id;
 }
 
 static int nvt_palm_sensor_write(int value)
