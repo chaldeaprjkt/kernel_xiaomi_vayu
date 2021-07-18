@@ -99,6 +99,11 @@
 #define DEFAULT_DEBUG_FW_NAME "novatek_debug_fw.bin"
 #define DEFAULT_DEBUG_MP_NAME "novatek_debug_mp.bin"
 
+#if WAKEUP_GESTURE
+#define DATA_PROTOCOL			30
+#define FUNCPAGE_GESTURE		1
+#define GESTURE_DOUBLE_CLICK	15
+#endif
 
 /* ---ESD Protect.--- */
 #define NVT_TOUCH_ESD_PROTECT 1
