@@ -172,14 +172,6 @@ struct drm_panel_esd_config {
 	int esd_err_irq_flags;
 };
 
-struct dsi_read_config {
-	bool enabled;
-	struct dsi_panel_cmd_set read_cmd;
-	u32 cmds_rlen;
-	u32 valid_bits;
-	u8 rbuf[64];
-};
-
 struct dsi_panel {
 	const char *name;
 	const char *type;
@@ -352,9 +344,5 @@ struct dsi_panel *dsi_panel_ext_bridge_get(struct device *parent,
 int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel);
 
 void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
-
-int dsi_panel_write_cmd_set(struct dsi_panel *panel, struct dsi_panel_cmd_set *cmd_sets);
-
-int dsi_panel_read_cmd_set(struct dsi_panel *panel, struct dsi_read_config *read_config);
 
 #endif /* _DSI_PANEL_H_ */
