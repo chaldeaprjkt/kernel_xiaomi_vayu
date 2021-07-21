@@ -115,7 +115,6 @@ struct nvt_ts_data {
 	struct platform_device *pdev;
 	struct input_dev *input_dev;
 	struct delayed_work nvt_fwu_work;
-	struct delayed_work nvt_lockdown_work;
 	struct work_struct switch_mode_work;
 	uint16_t addr;
 	int8_t phys[32];
@@ -147,11 +146,8 @@ struct nvt_ts_data {
 	struct pinctrl_state *pinctrl_state_active;
 	struct pinctrl_state *pinctrl_state_suspend;
 	int db_wakeup;
-	bool lkdown_readed;
-	u8 lockdown_info[NVT_LOCKDOWN_SIZE];
 	uint32_t config_array_size;
 	struct nvt_config_info *config_array;
-	int panel_index;
 	const u8 *fw_name;
 	const u8 *mp_name;
 	uint32_t spi_max_freq;
