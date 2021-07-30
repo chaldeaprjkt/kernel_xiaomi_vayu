@@ -6868,7 +6868,7 @@ static int ufshcd_wb_ctrl(struct ufs_hba *hba, bool enable)
 	}
 
 	hba->wb_enabled = enable;
-	dev_err(hba->dev, "%s Write-Booster %sd\n",
+	dev_dbg(hba->dev, "%s Write-Booster %sd\n",
 			__func__, enable ? "enable" : "disable");
 
 	return ret;
