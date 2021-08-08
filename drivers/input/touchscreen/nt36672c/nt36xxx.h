@@ -76,9 +76,7 @@
 #define PACKET_PALM_OFF 4
 
 #define DEFAULT_BOOT_UPDATE_FIRMWARE_FIRST "j20s_novatek_ts_fw01.bin"
-#define DEFAULT_MP_UPDATE_FIRMWARE_FIRST   "j20s_novatek_ts_mp01.bin"
 #define DEFAULT_BOOT_UPDATE_FIRMWARE_SECOND "j20s_novatek_ts_fw02.bin"
-#define DEFAULT_MP_UPDATE_FIRMWARE_SECOND   "j20s_novatek_ts_mp02.bin"
 
 #if WAKEUP_GESTURE
 #define DATA_PROTOCOL			30
@@ -98,7 +96,6 @@ struct nvt_config_info {
 	u8 display_maker;
 	u8 glass_vendor;
 	const char *nvt_fw_name;
-	const char *nvt_mp_name;
 	const char *nvt_limit_name;
 };
 
@@ -149,7 +146,6 @@ struct nvt_ts_data {
 	uint32_t config_array_size;
 	struct nvt_config_info *config_array;
 	const u8 *fw_name;
-	const u8 *mp_name;
 	uint32_t spi_max_freq;
 	struct attribute_group *attrs;
 	bool fw_debug;
