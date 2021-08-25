@@ -189,6 +189,42 @@
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-post-off-command-state = "dsi_hs_mode";
 
+				qcom,mdss-dsi-dispparam-cabcuion-command = [
+						15 01 00 00 00 00 02 FF 10
+						15 01 00 00 00 00 02 55 01
+				];
+				qcom,mdss-dsi-dispparam-cabcstillon-command = [
+						15 01 00 00 00 00 02 FF 10
+						15 01 00 00 00 00 02 55 02
+				];
+				qcom,mdss-dsi-dispparam-cabcmovieon-command = [
+						15 01 00 00 00 00 02 FF 10
+						15 01 00 00 00 00 02 55 03
+				];
+				qcom,mdss-dsi-dispparam-cabcoff-command = [
+						15 01 00 00 00 00 02 FF 10
+						15 01 00 00 00 00 02 55 00
+				];
+
+				qcom,mdss-dsi-dispparam-cabcuion-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-dispparam-cabcstillon-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-dispparam-cabcmovieon-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-dispparam-cabcoff-command-state = "dsi_hs_mode";
+
+				qcom,mdss-dsi-dispparam-lcd-hbm-l1-on-command = [
+						15 00 00 00 00 00 02 FF 10
+						39 01 00 00 00 00 03 51 0E A0];
+				qcom,mdss-dsi-dispparam-lcd-hbm-l2-on-command = [
+						15 00 00 00 00 00 02 FF 10
+						39 01 00 00 00 00 03 51 FF FF];
+				qcom,mdss-dsi-dispparam-lcd-hbm-off-command = [
+						15 00 00 00 00 00 02 FF 10
+						39 01 00 00 00 00 03 51 0D B5];
+
+				qcom,mdss-dsi-dispparam-lcd-hbm-l1-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-dispparam-lcd-hbm-l2-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-dispparam-lcd-hbm-off-command-state = "dsi_lp_mode";
+
 				qcom,mdss-dsi-h-sync-pulse = <1>;
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-version = <0x11>;
