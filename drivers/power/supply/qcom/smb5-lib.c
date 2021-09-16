@@ -3071,10 +3071,9 @@ static int smblib_therm_charging(struct smb_charger *chg)
 	case POWER_SUPPLY_TYPE_USB_PD:
 		if (chg->use_bq_pump) {
 			if (chg->pps_thermal_level < 0)
-					chg->pps_thermal_level = chg->system_temp_level;
-			pr_err("chg->pps_thermal_level=%d,chg->system_temp_level=%d\n", chg->pps_thermal_level, chg->system_temp_level);
-			thermal_fcc_ua =
-					chg->thermal_fcc_pps_cp[chg->pps_thermal_level];
+				chg->pps_thermal_level = chg->system_temp_level;
+
+			thermal_fcc_ua = chg->thermal_fcc_pps_cp[chg->pps_thermal_level];
 		} else {
 			if (chg->cp_reason == POWER_SUPPLY_CP_PPS) {
 				thermal_fcc_ua =

@@ -2169,7 +2169,7 @@ static void create_debugfs_entry(struct bq2597x *bq)
 		bq->debug_root = debugfs_create_dir("bq2597x-standalone", NULL);
 
 	if (!bq->debug_root)
-		pr_err("Failed to create debug dir\n");
+		pr_debug("Failed to create debug dir\n");
 
 	if (bq->debug_root) {
 		debugfs_create_file("registers",

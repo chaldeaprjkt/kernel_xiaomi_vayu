@@ -757,7 +757,7 @@ static int pd_send_msg(struct usbpd *pd, u8 msg_type, const u32 *data,
 				pd->spec_rev);
 
 	pd->tx_msgid[sop] = (pd->tx_msgid[sop] + 1) & PD_MAX_MSG_ID;
-	usbpd_info(&pd->dev, "pd->tx_msgid[sop]:%d,hdr:%x\n", pd->tx_msgid[sop], hdr);
+	usbpd_dbg(&pd->dev, "pd->tx_msgid[sop]:%d,hdr:%x\n", pd->tx_msgid[sop], hdr);
 	/* bail out and try again later if a message just arrived */
 	spin_lock_irqsave(&pd->rx_lock, flags);
 	if (!list_empty(&pd->rx_q)) {
@@ -2196,7 +2196,7 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 			if (num_vdos != 0) {
 				for (i = 0; i < num_vdos; i++) {
 					pd->adapter_id = vdos[i] & 0xFFFF;
-					usbpd_info(&pd->dev, "pd->adapter_id:0x%x\n", pd->adapter_id);
+					usbpd_dbg(&pd->dev, "pd->adapter_id:0x%x\n", pd->adapter_id);
 				}
 			}
 
