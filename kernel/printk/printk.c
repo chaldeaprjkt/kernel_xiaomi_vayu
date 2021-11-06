@@ -813,10 +813,16 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 			endp++;
 			len -= endp - line;
 			line = endp;
+			if (strncmp(line, "healthd", sizeof("healthd")) ||
+				strncmp(line, "it: processing a", sizeof("it: processing a")) ||
+				strncmp(line, "it: Untracked p", sizeof("it: Untracked p"))) {
+				goto free;
+			}
 		}
 	}
 
 	printk_emit(facility, level, NULL, 0, "%s", line);
+free:
 	kfree(buf);
 	return ret;
 }
