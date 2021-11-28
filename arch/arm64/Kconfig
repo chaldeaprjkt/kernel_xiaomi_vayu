@@ -1364,6 +1364,20 @@ config BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES
 	  Space separated list of names of dtbs to append when
 	  building a concatenated Image.gz-dtb.
 
+config ARM64_DTBO_RESTRICTED
+	bool "Restrict boot on unknown dtbo"
+	depends on OF
+	help
+	  Enabling this option will prevent any attempts to boot with
+	  dtbo that has different id.
+	  You should also specify ARM64_DTBO_RESTRICTED_ID and add the id
+	  to your overlay root for the validation.
+
+config ARM64_DTBO_RESTRICTED_ID
+	string "Accepted overlay id"
+	depends on ARM64_DTBO_RESTRICTED
+	default "default"
+
 choice
 	prompt "Kernel compression method"
 	default BUILD_ARM64_KERNEL_COMPRESSION_GZIP

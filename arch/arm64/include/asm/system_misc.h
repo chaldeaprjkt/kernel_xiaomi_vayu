@@ -47,6 +47,7 @@ extern void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
 extern char* (*arch_read_hardware_id)(void);
 
 const char * __init arch_read_machine_name(void);
+const char * __init arch_read_overlay_id(void);
 
 #define show_unhandled_signals_ratelimited()				\
 ({									\

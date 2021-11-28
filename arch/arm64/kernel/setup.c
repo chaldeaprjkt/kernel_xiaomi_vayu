@@ -284,10 +284,16 @@ const char * __init __weak arch_read_machine_name(void)
 	return of_flat_dt_get_machine_name();
 }
 
+const char * __init __weak arch_read_overlay_id(void)
+{
+	return "default";
+}
+
 static void __init setup_machine_fdt(phys_addr_t dt_phys)
 {
 	void *dt_virt = fixmap_remap_fdt(dt_phys);
 	const char *machine_name;
+	const char *overlay_id;
 
 	if (!dt_virt || !early_init_dt_scan(dt_virt)) {
 		pr_crit("\n"
@@ -303,6 +309,16 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 	machine_name = arch_read_machine_name();
 	if (!machine_name)
 		return;
+
+	overlay_id = arch_read_overlay_id();
+	if (overlay_id) {
+		pr_info("DTBO: Using %s\n", overlay_id);
+#ifdef CONFIG_ARM64_DTBO_RESTRICTED
+		if (strcmp(overlay_id, CONFIG_ARM64_DTBO_RESTRICTED_ID)) {
+			panic("Boot with incorrect device tree blob overlay is prohibited\n");
+		}
+#endif
+	}
 
 	pr_info("Machine: %s\n", machine_name);
 	dump_stack_set_arch_desc("%s (DT)", machine_name);

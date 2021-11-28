@@ -570,6 +570,25 @@ no_prop_path:
 	return of_flat_dt_get_machine_name();
 }
 
+
+const char * __init arch_read_overlay_id(void)
+{
+	static char overlay_id[256] = "";
+	u32 len = 0;
+	const char *name;
+
+	len = strlen(overlay_id);
+	name = of_get_flat_dt_prop(of_get_flat_dt_root(),
+				"overlay-id", NULL);
+
+	if (name)
+		len += snprintf(overlay_id + len,
+					sizeof(overlay_id) - len,
+					"%s", name);
+
+	return overlay_id;
+}
+
 uint32_t socinfo_get_raw_id(void)
 {
 	return socinfo ?
