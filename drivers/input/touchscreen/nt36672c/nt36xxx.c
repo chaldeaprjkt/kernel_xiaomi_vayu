@@ -1285,6 +1285,9 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_X, input_x);
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, input_y);
+			input_report_key(ts->input_dev, BTN_TOUCH, 1);
+			input_report_key(ts->input_dev, BTN_TOOL_FINGER, 1);
+			set_bit(input_id - 1, ts->slot_map);
 			finger_cnt++;
 		}
 	}
@@ -1293,10 +1296,14 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 		if (press_id[i] != 1) {
 			input_mt_slot(ts->input_dev, i);
 			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+			if (finger_cnt == 0 && test_bit(i, ts->slot_map)) {
+				input_report_key(ts->input_dev, BTN_TOUCH, 0);
+				input_report_key(ts->input_dev, BTN_TOOL_FINGER, 0);
+			}
+			clear_bit(i, ts->slot_map);
 		}
 	}
 
-	input_report_key(ts->input_dev, BTN_TOUCH, !!finger_cnt);
 	input_sync(ts->input_dev);
 
 out:
