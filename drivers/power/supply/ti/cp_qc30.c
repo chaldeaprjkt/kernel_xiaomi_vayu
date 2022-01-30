@@ -1017,13 +1017,9 @@ void cp_statemachine(unsigned int port)
 	}
 }
 
-static int cp_psy_is_lionsemi(void)
-{
-	return power_supply_get_by_name("ln8000");
-}
-
 static void cp_workfunc(struct work_struct *work)
 {
+	struct power_supply *psy;
 	cp_get_usb_type();
 
 	cp_update_sw_status();
@@ -1036,8 +1032,10 @@ static void cp_workfunc(struct work_struct *work)
 	/* check whether usb is present */
 	if (pm_state.usb_present == 0) {
 		cp_set_qc_bus_protections(HVDCP3_NONE);
-		if (cp_psy_is_lionsemi)
+		psy = power_supply_get_by_name("ln8000");
+		if (psy)
 			pm_state.state = CP_STATE_DISCONNECT;
+
 		return;
 	}
 
