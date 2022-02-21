@@ -2987,8 +2987,7 @@ int smblib_set_prop_batt_status(struct smb_charger *chg,
 	return 0;
 }
 
-#define CHARGING_PERIOD_S		600
-#define NOT_CHARGING_PERIOD_S		1200
+#define CHARGING_DELAY_MS 600
 static void smblib_reg_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
@@ -2999,21 +2998,16 @@ static void smblib_reg_work(struct work_struct *work)
 	rc = smblib_get_prop_usb_present(chg, &val);
 	if (rc < 0) {
 		pr_err("Couldn't get usb present rc=%d\n", rc);
-		schedule_delayed_work(&chg->reg_work,
-				NOT_CHARGING_PERIOD_S * HZ);
+		schedule_delayed_work(&chg->reg_work, msecs_to_jiffies(CHARGING_DELAY_MS));
 		return;
 	}
+
 	usb_present = val.intval;
-
-	if (usb_present) {
-		if (!chg->usb_main_psy) {
-			chg->usb_main_psy = power_supply_get_by_name("main");
-		}
-
-		schedule_delayed_work(&chg->reg_work, CHARGING_PERIOD_S * HZ);
-	} else {
-		schedule_delayed_work(&chg->reg_work, NOT_CHARGING_PERIOD_S * HZ);
+	if (usb_present && !chg->usb_main_psy) {
+		chg->usb_main_psy = power_supply_get_by_name("main");
 	}
+
+	schedule_delayed_work(&chg->reg_work, msecs_to_jiffies(CHARGING_DELAY_MS));
 }
 
 int smblib_set_prop_dc_temp_level(struct smb_charger *chg,
@@ -3222,7 +3216,8 @@ static void smblib_thermal_setting_work(struct work_struct *work)
 	smblib_therm_charging(chg);
 
 	if (chg->pps_thermal_level != chg->system_temp_level)
-		schedule_delayed_work(&chg->thermal_setting_work, 3 * HZ);
+		schedule_delayed_work(&chg->thermal_setting_work,
+			msecs_to_jiffies(300));
 }
 
 int smblib_set_prop_system_temp_level(struct smb_charger *chg,
@@ -3273,7 +3268,8 @@ int smblib_set_prop_system_temp_level(struct smb_charger *chg,
 #ifdef CONFIG_THERMAL
 	if (chg->use_bq_pump
 			&& chg->real_charger_type == POWER_SUPPLY_TYPE_USB_PD) {
-		schedule_delayed_work(&chg->thermal_setting_work, 3 * HZ);
+		schedule_delayed_work(&chg->thermal_setting_work,
+			msecs_to_jiffies(300));
 	} else {
 		smblib_therm_charging(chg);
 	}

@@ -1040,7 +1040,7 @@ static void cp_workfunc(struct work_struct *work)
 	}
 
 	if (pm_state.usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3)
-		schedule_delayed_work(&pm_state.qc3_pm_work, HZ);
+		schedule_delayed_work(&pm_state.qc3_pm_work, msecs_to_jiffies(100));
 }
 
 static int cp_qc30_notifier_call(struct notifier_block *nb,
@@ -1054,7 +1054,7 @@ static int cp_qc30_notifier_call(struct notifier_block *nb,
 	if (strcmp(psy->desc->name, "usb") == 0) {
 		cp_get_usb_type();
 		if (pm_state.usb_type == POWER_SUPPLY_TYPE_USB_HVDCP_3) {
-			schedule_delayed_work(&pm_state.qc3_pm_work, 3*HZ);
+			schedule_delayed_work(&pm_state.qc3_pm_work, msecs_to_jiffies(300));
 			usb_hvdcp3_on = true;
 		} else if (pm_state.usb_type == POWER_SUPPLY_TYPE_UNKNOWN && usb_hvdcp3_on == true) {
 			cancel_delayed_work(&pm_state.qc3_pm_work);

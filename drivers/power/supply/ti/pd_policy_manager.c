@@ -1256,7 +1256,7 @@ static void usbpd_pps_non_verified_contact(struct usbpd_pm *pdpm, bool connected
 	if (connected) {
 		usbpd_pm_evaluate_src_caps(pdpm);
 		if (pdpm->pps_supported)
-			schedule_delayed_work(&pdpm->pm_work, 5*HZ);
+			schedule_delayed_work(&pdpm->pm_work, msecs_to_jiffies(500));
 	} else {
 		usbpd_pm_disconnect(pdpm);
 	}
