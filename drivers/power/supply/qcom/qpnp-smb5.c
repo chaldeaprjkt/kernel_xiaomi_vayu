@@ -258,11 +258,6 @@ module_param_named(
 	weak_chg_icl_ua, __weak_chg_icl_ua, int, 0600
 );
 
-static bool disable_thermal = false;
-module_param_named(
-	disable_thermal, disable_thermal, bool, 0600
-);
-
 enum {
 	BAT_THERM = 0,
 	MISC_THERM,
@@ -2186,7 +2181,7 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 {
 	int rc = 0;
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
-	union power_supply_propval pval = {0,};
+
 	switch (prop) {
 	case POWER_SUPPLY_PROP_STATUS:
 		rc = smblib_set_prop_batt_status(chg, val);
@@ -2195,10 +2190,6 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 		rc = smblib_set_prop_input_suspend(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
-		if (disable_thermal) {
-			smblib_set_prop_system_temp_level(chg, &pval);
-			break;
-		}
 		rc = smblib_set_prop_system_temp_level(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_DC_THERMAL_LEVELS:
