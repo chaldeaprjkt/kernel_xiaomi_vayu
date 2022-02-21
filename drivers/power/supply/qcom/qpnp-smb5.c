@@ -4239,7 +4239,7 @@ static int smb5_probe(struct platform_device *pdev)
 		goto free_irq;
 	}
 
-	schedule_delayed_work(&chg->reg_work, 30 * HZ);
+	schedule_delayed_work(&chg->reg_work, msecs_to_jiffies(3 * MSEC_PER_SEC));
 
 	pr_info("QPNP SMB5 probed successfully\n");
 
