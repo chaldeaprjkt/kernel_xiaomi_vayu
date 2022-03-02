@@ -44,7 +44,7 @@ scm_version()
 	fi
 
 	# Check for aosp inline build
-	if test -z "${TARGET_PRODUCT##*_*}"; then
+	if grep -q '_' <<< "${TARGET_PRODUCT}"; then
 		# target string, excluding device name
 		echo "-${TARGET_PRODUCT%_*}"
 		return
