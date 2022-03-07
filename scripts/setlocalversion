@@ -46,8 +46,7 @@ scm_version()
 	# Check for aosp inline build
 	if grep -q '_' <<< "${TARGET_PRODUCT}"; then
 		# target string, excluding device name
-		echo "-${TARGET_PRODUCT%_*}"
-		return
+		printf '%s' "-${TARGET_PRODUCT%_*}"
 	fi
 
 	# Check for git and a git repo.
