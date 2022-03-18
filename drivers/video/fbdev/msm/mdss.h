@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, 2020-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -423,6 +423,8 @@ struct mdss_data_type {
 	u32 *vbif_rt_qos;
 	u32 *vbif_nrt_qos;
 	u32 npriority_lvl;
+	u32 rot_dwnscale_min;
+	u32 rot_dwnscale_max;
 
 	struct mult_factor ab_factor;
 	struct mult_factor ib_factor;
@@ -515,6 +517,7 @@ struct mdss_data_type {
 	bool twm_en;
 	int handoff_pending;
 	bool idle_pc;
+	bool panel_idle_mode;
 	struct mdss_perf_tune perf_tune;
 	bool traffic_shaper_en;
 	int iommu_ref_cnt;
@@ -585,6 +588,7 @@ int mdss_update_reg_bus_vote(struct reg_bus_client *bus_client,
 				u32 usecase_ndx);
 struct reg_bus_client *mdss_reg_bus_vote_client_create(char *client_name);
 void mdss_reg_bus_vote_client_destroy(struct reg_bus_client *bus_client);
+void mdss_mdp_set_panel_idle_mode(bool enable);
 
 struct mdss_util_intf {
 	bool mdp_probe_done;

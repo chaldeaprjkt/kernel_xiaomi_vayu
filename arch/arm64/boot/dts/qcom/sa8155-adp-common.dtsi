@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,7 +70,7 @@
 		vio-supply = <&pm8150_2_l7>;
 		vdd-supply = <&pm8150_2_l16>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <12 IRQ_TYPE_EDGE_RISING>;
+		interrupts = <12 IRQ_TYPE_LEVEL_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&sensor_int1_default
 			&sensor_int2_default>;
@@ -101,6 +101,7 @@
 		pinctrl-0 = <&ss5_pwr_ctrl_rst_on>;
 		ssVreset-gpio = <&tlmm 11 1>;
 		ssVonoff-gpio = <&tlmm 39 1>;
+		ssVboot-gpio = <&tlmm 40 1>;
 	};
 
 	qcom,turing@8300000 {
@@ -183,13 +184,16 @@
 	vdd-hba-supply = <&ufs_phy_gdsc>;
 	vdd-hba-fixed-regulator;
 	vcc-supply = <&pm8150_1_l10>;
-	vcc-voltage-level = <2950000 2960000>;
+	vcc-voltage-level = <2500000 2960000>;
 	vccq2-supply = <&pm8150_1_s4>;
 	vcc-max-microamp = <750000>;
 	vccq2-max-microamp = <750000>;
 
 	qcom,vddp-ref-clk-supply = <&pm8150_2_l5>;
 	qcom,vddp-ref-clk-max-microamp = <100>;
+
+	/* Disable Write Booster Feature */
+	qcom,disable-wb-support;
 
 	status = "ok";
 };
@@ -214,9 +218,36 @@
 	status = "ok";
 };
 
+&pm8150_1_gpios {
+	usb1_oc {
+		usb1_oc_default: usb1_oc_default {
+			pins = "gpio10";
+			function = "normal";
+			input-enable;
+			bias-pull-up;
+			power-source = <0>;
+		};
+	};
+};
+
+&pm8150_2_gpios {
+	usb0_oc {
+		usb0_oc_default: usb0_oc_default {
+			pins = "gpio10";
+			function = "normal";
+			input-enable;
+			bias-pull-up;
+			power-source = <0>;
+		};
+	};
+};
+
 &usb0 {
 	qcom,default-mode-none;
 	qcom,ignore-wakeup-src-in-hostmode;
+	oc-gpio = <&pm8150_2_gpios 10 GPIO_ACTIVE_LOW>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&usb0_oc_default>;
 	dwc3@a600000 {
 		usb-phy = <&usb2_phy0>, <&usb_nop_phy>;
 		maximum-speed = "high-speed";
@@ -236,13 +267,27 @@
 };
 
 &usb1 {
+	interrupts = <0 491 0>, <0 487 0>, <0 490 0>;
+	interrupt-names = "dp_hs_phy_irq",
+			"ss_phy_irq", "dm_hs_phy_irq";
 	status = "ok";
 	qcom,default-mode-host;
 	qcom,ignore-wakeup-src-in-hostmode;
+	oc-gpio = <&pm8150_1_gpios 10 GPIO_ACTIVE_LOW>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&usb1_oc_default>;
+	dwc3@a800000 {
+		reg = <0x0a800000 0xd941>;
+		snps,force-gen1;
+		snps,dis_u3_susphy_quirk;
+		maximum-speed = "super-speed";
+	};
 };
 
 &usb2_phy1 {
-	qcom,param-override-seq = <0x01 0xb0>;
+	qcom,param-override-seq =
+		<0x43 0x70
+		 0x01 0xb0>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&usb2phy_ac_en2_default>;
 };

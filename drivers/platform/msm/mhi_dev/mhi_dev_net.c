@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -709,7 +709,7 @@ static void mhi_dev_net_state_cb(struct mhi_dev_client_cb_data *cb_data)
 int mhi_dev_net_interface_init(void)
 {
 	int ret_val = 0, index = 0;
-	bool out_channel_started = false;
+	uint32_t info_out_ch = 0;
 	struct mhi_dev_net_client *mhi_net_client = NULL;
 
 	if (mhi_net_ctxt.client_handle) {
@@ -741,6 +741,14 @@ int mhi_dev_net_interface_init(void)
 	/*Process pending packet work queue*/
 	mhi_net_client->pending_pckt_wq =
 		create_singlethread_workqueue("pending_xmit_pckt_wq");
+
+	if (!mhi_net_client->pending_pckt_wq) {
+		mhi_dev_net_log(MHI_ERROR,
+				"Unable to alloc pending_pckt_wq\n");
+		ret_val = -ENOMEM;
+		goto pending_pckt_wq_alloc_fail;
+	}
+
 	INIT_WORK(&mhi_net_client->xmit_work,
 			mhi_dev_net_process_queue_packets);
 
@@ -764,10 +772,7 @@ int mhi_dev_net_interface_init(void)
 	}
 	ret_val = mhi_register_state_cb(mhi_dev_net_state_cb,
 				mhi_net_client, MHI_CLIENT_IP_SW_4_OUT);
-	/* -EEXIST indicates success and channel is already open */
-	if (ret_val == -EEXIST)
-		out_channel_started = true;
-	else if (ret_val < 0)
+	if (ret_val < 0 && ret_val != -EEXIST)
 		goto register_state_cb_fail;
 
 	ret_val = mhi_register_state_cb(mhi_dev_net_state_cb,
@@ -784,13 +789,16 @@ int mhi_dev_net_interface_init(void)
 		 * with mhi_dev_net_open_chan_create_netif().
 		 */
 		ret_val = 0;
-		if (out_channel_started) {
-			ret_val = mhi_dev_net_open_chan_create_netif
-							(mhi_net_client);
-			if (ret_val < 0) {
-				mhi_dev_net_log(MHI_ERROR,
-					"Failed to open channels\n");
-				goto channel_open_fail;
+		if (!mhi_ctrl_state_info(mhi_net_client->out_chan,
+					&info_out_ch)) {
+			if (info_out_ch == MHI_STATE_CONNECTED) {
+				ret_val = mhi_dev_net_open_chan_create_netif
+					(mhi_net_client);
+				if (ret_val < 0) {
+					mhi_dev_net_log(MHI_ERROR,
+							"Failed to open channels\n");
+					goto channel_open_fail;
+				}
 			}
 		}
 	} else if (ret_val < 0) {
@@ -805,6 +813,7 @@ register_state_cb_fail:
 client_register_fail:
 channel_init_fail:
 	destroy_workqueue(mhi_net_client->pending_pckt_wq);
+pending_pckt_wq_alloc_fail:
 	kfree(mhi_net_client);
 	kfree(mhi_net_ipc_log);
 	return ret_val;

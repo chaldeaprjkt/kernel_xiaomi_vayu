@@ -1,4 +1,4 @@
-/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,17 +14,15 @@
 
 #include <linux/ipc_logging.h>
 #include <linux/msm-bus.h>
+#include <linux/clk.h>
 #include <linux/mailbox_client.h>
 #include <linux/mailbox/qmp.h>
 #include <linux/mailbox_controller.h>
-
 #include <linux/inetdevice.h>
 #include <linux/inet.h>
-
 #include <net/addrconf.h>
 #include <net/ipv6.h>
 #include <net/inet_common.h>
-
 #include <linux/uaccess.h>
 
 extern void *ipc_stmmac_log_ctxt;
@@ -115,6 +113,7 @@ do {\
 #define TTSL0				GENMASK(30, 0)
 #define MAC_PPSX_INTERVAL(x)		(0x00000b88 + ((x) * 0x10))
 #define MAC_PPSX_WIDTH(x)		(0x00000b8c + ((x) * 0x10))
+#define MAC_RXQCTRL_PSRQX_PRIO_SHIFT(x)	(1 << x)
 
 #define PPS_START_DELAY 100000000
 #define ONE_NS 1000000000
@@ -166,6 +165,8 @@ do {\
 #define SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY_CODE	GENMASK(29, 27)
 #define SDCC_DDR_CONFIG_EXT_PRG_RCLK_DLY_EN	BIT(30)
 #define SDCC_DDR_CONFIG_PRG_RCLK_DLY		GENMASK(8, 0)
+#define SDCC_DDR_CONFIG_TCXO_CYCLES_DLY_LINE	GENMASK(20, 12)
+#define SDCC_DDR_CONFIG_TCXO_CYCLES_CNT	GENMASK(11, 9)
 
 /* SDCC_HC_REG_DLL_CONFIG2 fields */
 #define SDCC_DLL_CONFIG2_DLL_CLOCK_DIS		BIT(21)
@@ -234,10 +235,33 @@ do {\
 #define VOTE_IDX_10MBPS 1
 #define VOTE_IDX_100MBPS 2
 #define VOTE_IDX_1000MBPS 3
+#define VOTE_IDX_MDIO_NOM_CLK 4
+
+#define ETH_AHB_BUS_CFG_NOMINAL 1
+#define ETH_AHB_BUS_CFG_RECOVER 0
+
+/* Clock rates */
+#define RGMII_1000_NOM_CLK_FREQ			(250 * 1000 * 1000UL)
+
+#define RGMII_ID_MODE_100_LOW_SVS_CLK_FREQ	 (50 * 1000 * 1000UL)
+#define RGMII_NON_ID_MODE_100_LOW_SVS_CLK_FREQ   (25 * 1000 * 1000UL)
+
+#define RGMII_ID_MODE_10_LOW_SVS_CLK_FREQ	  (5 * 1000 * 1000UL)
+#define RGMII_NON_ID_MODE_10_LOW_SVS_CLK_FREQ	 (2.5 * 1000 * 1000UL)
+
+#define RMII_100_LOW_SVS_CLK_FREQ  (50 * 1000 * 1000UL)
+#define RMII_10_LOW_SVS_CLK_FREQ  (50 * 1000 * 1000UL)
+
+#define MII_100_LOW_SVS_CLK_FREQ  (25 * 1000 * 1000UL)
+#define MII_10_LOW_SVS_CLK_FREQ  (2.5 * 1000 * 1000UL)
 
 //Mac config
 #define MAC_CONFIGURATION 0x0
 #define MAC_LM BIT(12)
+
+#define EMAC_QUEUE_0 0
+#define EMAC_CHANNEL_0 0
+#define EMAC_CHANNEL_1 1
 
 #define TLMM_BASE_ADDRESS (tlmm_central_base_addr)
 
@@ -398,6 +422,13 @@ enum current_phy_state {
 	RGMII_IO_MACRO_CONFIG_RGWR(v);\
 } while (0)
 
+#define RGMII_TCXO_CYCLES_DLY_LINE 64
+#define RGMII_TCXO_PERIOD_NS 52
+#define RGMII_TCXO_CYCLES_CNT 4
+
+#define RGMII_PRG_RCLK_CONST \
+	(RGMII_TCXO_PERIOD_NS * RGMII_TCXO_CYCLES_CNT / 2)
+
 enum CV2X_MODE {
 	CV2X_MODE_DISABLE = 0x0,
 	CV2X_MODE_MDM,
@@ -422,8 +453,12 @@ struct ethqos_emac_driver_data {
 };
 
 struct ethqos_io_macro {
+	unsigned int prg_rclk_dly;
+	u32 usr_ctl;
+	bool usr_ctl_set;
 	bool rx_prog_swap;
 	bool rx_dll_bypass;
+	bool clear_cdt_ext_en;
 };
 
 struct ethqos_extra_dma_stats {
@@ -497,20 +532,21 @@ struct qcom_ethqos {
 	struct cdev *avb_class_b_cdev;
 	struct class *avb_class_b_class;
 
+	/* Mac recovery dev node variables*/
 	dev_t emac_dev_t;
 	struct cdev *emac_cdev;
 	struct class *emac_class;
 
+	dev_t emac_rec_dev_t;
+	struct cdev *emac_rec_cdev;
+	struct class *emac_rec_class;
 	unsigned long avb_class_a_intr_cnt;
 	unsigned long avb_class_b_intr_cnt;
 	struct dentry *debugfs_dir;
+	bool skip_mdio_vote;
 
 	/* saving state for Wake-on-LAN */
 	int wolopts;
-	/* state of enabled wol options in PHY*/
-	u32 phy_wol_wolopts;
-	/* state of supported wol options in PHY*/
-	u32 phy_wol_supported;
 	/* Boolean to check if clock is suspended*/
 	int clks_suspended;
 	/* Structure which holds done and wait members */
@@ -537,7 +573,6 @@ struct qcom_ethqos {
 
 	unsigned int emac_phy_off_suspend;
 	int loopback_speed;
-	enum loopback_mode current_loopback;
 	enum phy_power_mode current_phy_mode;
 	enum current_phy_state phy_state;
 	/*Backup variable for phy loopback*/
@@ -560,6 +595,20 @@ struct qcom_ethqos {
 	unsigned char cv2x_dev_addr[ETH_ALEN];
 
 	struct ethqos_extra_dma_stats xstats;
+	struct notifier_block qti_nb;
+	/* SSR over ethernet parameters */
+	struct work_struct eth_ssr;
+	unsigned long action;
+
+	/* Mac recovery parameters */
+	int mac_err_cnt[MAC_ERR_CNT];
+	bool mac_rec_en[MAC_ERR_CNT];
+	bool mac_rec_fail[MAC_ERR_CNT];
+	int mac_rec_cnt[MAC_ERR_CNT];
+	int mac_rec_threshold[MAC_ERR_CNT];
+	struct delayed_work tdu_rec;
+	bool tdu_scheduled;
+	int tdu_chan;
 };
 
 struct pps_cfg {
@@ -610,7 +659,7 @@ int create_pps_interrupt_device_node(dev_t *pps_dev_t,
 				     struct cdev **pps_cdev,
 				     struct class **pps_class,
 				     char *pps_dev_node_name);
-void qcom_ethqos_request_phy_wol(struct plat_stmmacenet_data *plat);
+int ethqos_remove_pps_dev(struct qcom_ethqos *ethqos);
 bool qcom_ethqos_is_phy_link_up(struct qcom_ethqos *ethqos);
 void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos);
 
@@ -676,10 +725,11 @@ struct dwmac_qcom_avb_algorithm {
 	enum dwmac_qcom_queue_operating_mode op_mode;
 };
 
+int ethqos_init_pps(void *priv);
 int dwmac_qcom_program_avb_algorithm(
 	struct stmmac_priv *priv, struct ifr_data_struct *req);
 unsigned int dwmac_qcom_get_plat_tx_coal_frames(
 	struct sk_buff *skb);
-
+struct qcom_ethqos *get_pethqos(void);
 unsigned int dwmac_qcom_get_eth_type(unsigned char *buf);
 #endif

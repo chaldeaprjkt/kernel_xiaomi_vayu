@@ -1,7 +1,7 @@
 /*
  * MDSS MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2018, 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2018, 2020-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -1784,6 +1784,15 @@ void mdss_bus_bandwidth_ctrl(int enable)
 }
 EXPORT_SYMBOL(mdss_bus_bandwidth_ctrl);
 
+void mdss_mdp_set_panel_idle_mode(bool enable)
+{
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	mdata->panel_idle_mode = enable;
+
+}
+EXPORT_SYMBOL(mdss_mdp_set_panel_idle_mode);
+
 void mdss_mdp_clk_ctrl(int enable)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
@@ -2795,7 +2804,14 @@ ssize_t mdss_mdp_show_capabilities(struct device *dev,
 				mdata->scaler_off->ndest_scalers);
 		SPRINT("max_dest_scale_up=%u\n", MAX_UPSCALE_RATIO);
 	}
-
+	if (mdata->has_rot_dwnscale) {
+		if (mdata->rot_dwnscale_min)
+			SPRINT("rot_dwnscale_min=%u\n",
+				mdata->rot_dwnscale_min);
+		if (mdata->rot_dwnscale_max)
+			SPRINT("rot_dwnscale_max=%u\n",
+				mdata->rot_dwnscale_max);
+	}
 	SPRINT("features=");
 	if (mdata->has_bwc)
 		SPRINT(" bwc");
@@ -3267,6 +3283,8 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 			(mdata->mdp_rev < MDSS_MDP_HW_REV_200))
 		mdss_res->mdp_irq_export[0] = MDSS_MDP_INTR_WB_0_DONE |
 						MDSS_MDP_INTR_WB_1_DONE;
+
+	mdss_res->panel_idle_mode = false;
 
 	pr_info("mdss version = 0x%x, bootloader display is %s, num %d, intf_sel=0x%08x\n",
 		mdata->mdp_rev, num_of_display_on ? "on" : "off",
@@ -4645,6 +4663,19 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 		 "qcom,mdss-traffic-shaper-enabled");
 	mdata->has_rot_dwnscale = of_property_read_bool(pdev->dev.of_node,
 		"qcom,mdss-has-rotator-downscale");
+	if (mdata->has_rot_dwnscale) {
+		rc = of_property_read_u32(pdev->dev.of_node,
+			"qcom,mdss-rot-downscale-min",
+			&mdata->rot_dwnscale_min);
+		if (rc)
+			pr_err("Min rotator downscale property not specified\n");
+
+		rc = of_property_read_u32(pdev->dev.of_node,
+			"qcom,mdss-rot-downscale-max",
+			&mdata->rot_dwnscale_max);
+		if (rc)
+			pr_err("Max rotator downscale property not specified\n");
+	}
 
 	rc = of_property_read_u32(pdev->dev.of_node,
 		"qcom,mdss-dram-channels", &mdata->bus_channels);
@@ -5270,6 +5301,18 @@ void mdss_mdp_footswitch_ctrl(struct mdss_data_type *mdata, int on)
 			}
 			mdata->mem_retain = true;
 			regulator_disable(mdata->fs);
+
+			if (mdata->panel_idle_mode) {
+				/*
+				 * Re-enable and disable MDP footswitch
+				 * controller when panel is in idle mode
+				 * to ensure proper MDSS power collapse.
+				 */
+
+				regulator_enable(mdata->fs);
+				regulator_disable(mdata->fs);
+			}
+
 			if (mdata->core_gdsc)
 				regulator_disable(mdata->core_gdsc);
 

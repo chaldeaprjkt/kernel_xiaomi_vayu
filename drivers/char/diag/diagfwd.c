@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2019, 2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1360,6 +1360,12 @@ void diag_process_hdlc_pkt(void *data, unsigned int len, int pid)
 		return;
 	}
 
+	if (!driver->driver_initialized) {
+		pr_err("diag: %s: returning, driver is not initialized: %d\n",
+		 __func__, driver->driver_initialized);
+		return;
+	}
+
 	mutex_lock(&driver->diag_hdlc_mutex);
 	pr_debug("diag: In %s, received packet of length: %d, req_buf_len: %d\n",
 		 __func__, len, driver->hdlc_buf_len);
@@ -1743,6 +1749,12 @@ void diag_process_non_hdlc_pkt(unsigned char *buf, int len, int pid)
 	unsigned char *data_ptr = NULL;
 	struct diag_partial_pkt_t *partial_pkt = NULL;
 
+	if (!driver->driver_initialized) {
+		pr_err("diag: %s: returning, driver is not initialized: %d\n",
+		 __func__, driver->driver_initialized);
+		return;
+	}
+
 	mutex_lock(&driver->hdlc_recovery_mutex);
 	if (!buf || len <= 0) {
 		mutex_unlock(&driver->hdlc_recovery_mutex);
@@ -1977,9 +1989,7 @@ int diagfwd_init(void)
 	driver->supports_pd_buffering = 1;
 	for (i = 0; i < NUM_PERIPHERALS; i++)
 		driver->peripheral_untag[i] = 0;
-	mutex_init(&driver->diag_hdlc_mutex);
-	mutex_init(&driver->diag_cntl_mutex);
-	mutex_init(&driver->mode_lock);
+
 	driver->encoded_rsp_buf = kzalloc(DIAG_MAX_HDLC_BUF_SIZE +
 				APF_DIAG_PADDING, GFP_KERNEL);
 	if (!driver->encoded_rsp_buf)
@@ -1991,14 +2001,13 @@ int diagfwd_init(void)
 		goto err;
 	setup_timer(&driver->hdlc_reset_timer, hdlc_reset_timer_func, 0);
 	kmemleak_not_leak(hdlc_decode);
+
 	driver->encoded_rsp_len = 0;
 	driver->rsp_buf_busy = 0;
-	spin_lock_init(&driver->rsp_buf_busy_lock);
 	driver->user_space_data_busy = 0;
 	driver->hdlc_buf_len = 0;
-	INIT_LIST_HEAD(&driver->cmd_reg_list);
 	driver->cmd_reg_count = 0;
-	mutex_init(&driver->cmd_reg_mutex);
+
 	INIT_WORK(&(driver->diag_hdlc_reset_work),
 			diag_timer_work_fn);
 

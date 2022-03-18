@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -91,7 +91,7 @@ struct export_desc_super *habmem_add_export(
 	if (!vchan || !sizebytes)
 		return NULL;
 
-	exp_super = kzalloc(sizebytes, GFP_KERNEL);
+	exp_super = vzalloc(sizebytes);
 	if (!exp_super)
 		return NULL;
 
@@ -139,7 +139,9 @@ void habmem_remove_export(struct export_desc *exp)
 	}
 
 	ctx = exp->ctx;
+	write_lock(&ctx->exp_lock);
 	ctx->export_total--;
+	write_unlock(&ctx->exp_lock);
 	exp->ctx = NULL;
 
 	habmem_export_put(exp_super);
@@ -177,7 +179,7 @@ static void habmem_export_destroy(struct kref *refcount)
 	spin_unlock(&pchan->expid_lock);
 
 	habmem_exp_release(exp_super);
-	kfree(exp_super);
+	vfree(exp_super);
 }
 
 /*
@@ -373,17 +375,17 @@ int hab_mem_import(struct uhab_context *ctx,
 	}
 	spin_unlock_bh(&ctx->imp_lock);
 
-	if ((exp->payload_count << PAGE_SHIFT) != param->sizebytes) {
-		pr_err("input size %d don't match buffer size %d\n",
-			param->sizebytes, exp->payload_count << PAGE_SHIFT);
-		ret = -EINVAL;
-		goto err_imp;
-	}
-
 	if (!found) {
 		pr_err("Fail to get export descriptor from export id %d\n",
 			param->exportid);
 		ret = -ENODEV;
+		goto err_imp;
+	}
+
+	if ((exp->payload_count << PAGE_SHIFT) != param->sizebytes) {
+		pr_err("input size %d don't match buffer size %d\n",
+			param->sizebytes, exp->payload_count << PAGE_SHIFT);
+		ret = -EINVAL;
 		goto err_imp;
 	}
 

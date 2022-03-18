@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
- * Copyright (c) 2013, 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2018-2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@
 #include <uapi/linux/sched/types.h>
 
 #include "qrtr.h"
+#include "bpf_service.h"
 
 #define QRTR_LOG_PAGE_CNT 4
 #define QRTR_INFO(ctx, x, ...)				\
@@ -43,8 +44,6 @@
 /* qrtr socket states */
 #define QRTR_STATE_MULTI	-2
 #define QRTR_STATE_INIT	-1
-
-#define AID_VENDOR_QRTR	KGIDT_INIT(2906)
 
 /**
  * struct qrtr_hdr_v1 - (I|R)PCrouter packet header version 1
@@ -123,6 +122,7 @@ static inline struct qrtr_sock *qrtr_sk(struct sock *sk)
 }
 
 static unsigned int qrtr_local_nid = CONFIG_QRTR_NODE_ID;
+static unsigned int qrtr_wakeup_ms = CONFIG_QRTR_WAKEUP_MS;
 
 /* for node ids */
 static RADIX_TREE(qrtr_nodes, GFP_KERNEL);
@@ -210,22 +210,28 @@ static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			      int type, struct sockaddr_qrtr *from,
 			      struct sockaddr_qrtr *to, unsigned int flags);
-static void qrtr_handle_del_proc(struct sk_buff *skb);
+static void qrtr_handle_del_proc(struct qrtr_node *node, struct sk_buff *skb);
+static void qrtr_cleanup_flow_control(struct qrtr_node *node,
+				      struct sk_buff *skb);
 
 static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 			    struct sk_buff *skb)
 {
 	struct qrtr_ctrl_pkt pkt = {0,};
 	u64 pl_buf = 0;
+	u32 data_size;
 	u32 type;
 
 	if (!hdr || !skb)
 		return;
 
 	type = le32_to_cpu(hdr->type);
+	data_size = sizeof(pl_buf);
 
 	if (type == QRTR_TYPE_DATA) {
-		skb_copy_bits(skb, QRTR_HDR_MAX_SIZE, &pl_buf, sizeof(pl_buf));
+		if (hdr->size < data_size)
+			data_size = hdr->size;
+		skb_copy_bits(skb, QRTR_HDR_MAX_SIZE, &pl_buf, data_size);
 		QRTR_INFO(node->ilc,
 			  "TX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x] [%s]\n",
 			  hdr->size, hdr->confirm_rx,
@@ -271,14 +277,18 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 	struct qrtr_ctrl_pkt pkt = {0,};
 	struct qrtr_cb *cb;
 	u64 pl_buf = 0;
+	u32 data_size;
 
 	if (!skb || !skb->data)
 		return;
 
 	cb = (struct qrtr_cb *)skb->cb;
+	data_size = sizeof(pl_buf);
 
 	if (cb->type == QRTR_TYPE_DATA) {
-		skb_copy_bits(skb, 0, &pl_buf, sizeof(pl_buf));
+		if (skb->len < data_size)
+			data_size = skb->len;
+		skb_copy_bits(skb, 0, &pl_buf, data_size);
 		QRTR_INFO(node->ilc,
 			  "RX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]\n",
 			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
@@ -309,6 +319,10 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 				pr_err("qrtr: Modem QMI Readiness RX cmd:0x%x node[0x%x]\n",
 				       cb->type, cb->src_node);
 			}
+		else if (cb->type == QRTR_TYPE_DEL_PROC)
+			QRTR_INFO(node->ilc,
+				  "RX CTRL: cmd:0x%x node[0x%x]\n",
+				  cb->type, le32_to_cpu(pkt.proc.node));
 	}
 }
 
@@ -355,7 +369,8 @@ static void __qrtr_node_release(struct kref *kref)
 	if (node->nid != QRTR_EP_NID_AUTO) {
 		radix_tree_for_each_slot(slot, &qrtr_nodes, &iter, 0) {
 			if (node == *slot)
-				radix_tree_delete(&qrtr_nodes, iter.index);
+				radix_tree_iter_delete(&qrtr_nodes, &iter,
+						       slot);
 		}
 	}
 
@@ -371,8 +386,8 @@ static void __qrtr_node_release(struct kref *kref)
 			sock_put(waiter->sk);
 			kfree(waiter);
 		}
+		radix_tree_iter_delete(&node->qrtr_tx_flow, &iter, slot);
 		kfree(flow);
-		radix_tree_delete(&node->qrtr_tx_flow, iter.index);
 	}
 	mutex_unlock(&node->qrtr_tx_lock);
 
@@ -425,11 +440,13 @@ static void qrtr_tx_resume(struct qrtr_node *node, struct sk_buff *skb)
 	src.sq_port = le32_to_cpu(pkt.client.port);
 	key = (u64)src.sq_node << 32 | src.sq_port;
 
-	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
-	if (!flow)
-		return;
-
 	mutex_lock(&node->qrtr_tx_lock);
+	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
+	if (!flow) {
+		mutex_unlock(&node->qrtr_tx_lock);
+		return;
+	}
+
 	atomic_set(&flow->pending, 0);
 	wake_up_interruptible_all(&node->resume_tx);
 
@@ -479,20 +496,20 @@ static int qrtr_tx_wait(struct qrtr_node *node, struct sockaddr_qrtr *to,
 	/* Assume sk is set correctly for all data type packets */
 	timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
 
-	mutex_lock(&node->qrtr_tx_lock);
-	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
-	if (!flow) {
-		flow = kzalloc(sizeof(*flow), GFP_KERNEL);
-		if (!flow)
-			return 1;
-		INIT_LIST_HEAD(&flow->waiters);
-		radix_tree_insert(&node->qrtr_tx_flow, key, flow);
-	}
-	mutex_unlock(&node->qrtr_tx_lock);
-
 	ret = timeo;
 	for (;;) {
 		mutex_lock(&node->qrtr_tx_lock);
+		flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
+		if (!flow) {
+			flow = kzalloc(sizeof(*flow), GFP_KERNEL);
+			if (!flow) {
+				mutex_unlock(&node->qrtr_tx_lock);
+				return 1;
+			}
+			INIT_LIST_HEAD(&flow->waiters);
+			radix_tree_insert(&node->qrtr_tx_flow, key, flow);
+		}
+
 		if (atomic_read(&flow->pending) < QRTR_TX_FLOW_HIGH) {
 			atomic_inc(&flow->pending);
 			confirm_rx = atomic_read(&flow->pending) ==
@@ -532,6 +549,7 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			     int type, struct sockaddr_qrtr *from,
 			     struct sockaddr_qrtr *to, unsigned int flags)
 {
+	struct qrtr_ctrl_pkt pkt = {0,};
 	struct qrtr_hdr_v1 *hdr;
 	int confirm_rx;
 	size_t len = skb->len;
@@ -572,6 +590,21 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	hdr->dst_port_id = cpu_to_le32(to->sq_port);
 	hdr->size = cpu_to_le32(len);
 	hdr->confirm_rx = !!confirm_rx;
+
+	if (type == QRTR_TYPE_NEW_SERVER) {
+		skb_copy_bits(skb, QRTR_HDR_MAX_SIZE, &pkt, sizeof(pkt));
+		/**
+		 * Run qrtr filter to drop the restricted new server message
+		 * that is being transmitted to connected soc
+		 */
+		rc = qrtr_run_bpf_filter(skb, le32_to_cpu(pkt.server.service),
+					 le32_to_cpu(pkt.server.instance),
+					 type, le32_to_cpu(hdr->dst_node_id));
+		if (rc) {
+			kfree_skb(skb);
+			return rc;
+		}
+	}
 
 	qrtr_log_tx_msg(node, hdr, skb);
 	rc = skb_put_padto(skb, ALIGN(len, 4) + sizeof(*hdr));
@@ -642,11 +675,18 @@ static void qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 	if (tnode)
 		return;
 
+	/* If the node is not in qrtr_all_epts, it is being released and should
+	 * not be inserted into the lookup table.
+	 */
 	down_write(&qrtr_node_lock);
-	radix_tree_insert(&qrtr_nodes, nid, node);
-
-	if (node->nid == QRTR_EP_NID_AUTO)
-		node->nid = nid;
+	list_for_each_entry(tnode, &qrtr_all_epts, item) {
+		if (tnode == node) {
+			radix_tree_insert(&qrtr_nodes, nid, node);
+			if (node->nid == QRTR_EP_NID_AUTO)
+				node->nid = nid;
+			break;
+		}
+	}
 	up_write(&qrtr_node_lock);
 
 	snprintf(name, sizeof(name), "qrtr_%d", nid);
@@ -657,7 +697,7 @@ static void qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 	 * From other nodes sensor service stream samples
 	 * cause APPS suspend problems and power drain issue.
 	 */
-	if (!node->ws && nid == 0)
+	if (!node->ws && nid != 9)
 		node->ws = wakeup_source_register(NULL, name);
 }
 
@@ -757,6 +797,43 @@ static void qrtr_backup_deinit(void)
 }
 
 /**
+ * qrtr_get_header_size() - check header type to get header size
+ *
+ * @data: Starting address of the packet which points to router header.
+ *
+ * @returns: packet header size on success, < 0 on error.
+ *
+ * This function is used by the underlying transport abstraction layer to
+ * check header size expected for an incoming packet. This information
+ * is used to perform link layer fragmentation and re-assembly
+ */
+int qrtr_get_header_size(const void *data)
+{
+	const struct qrtr_hdr_v1 *v1;
+	const struct qrtr_hdr_v2 *v2;
+	unsigned int hdrlen;
+	unsigned int ver;
+
+	ver = *(u8 *)data;
+
+	switch (ver) {
+	case QRTR_PROTO_VER_1:
+		hdrlen = sizeof(*v1);
+		break;
+	case QRTR_PROTO_VER_2:
+		v2 = data;
+		hdrlen = sizeof(*v2) + v2->optlen;
+		break;
+	default:
+		pr_err("qrtr: %s:Invalid version %d\n", __func__, ver);
+		return -EINVAL;
+	}
+
+	return hdrlen;
+}
+EXPORT_SYMBOL(qrtr_get_header_size);
+
+/**
  * qrtr_endpoint_post() - post incoming data
  * @ep: endpoint handle
  * @data: data pointer
@@ -841,7 +918,7 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	    cb->type != QRTR_TYPE_RESUME_TX)
 		goto err;
 
-	__pm_wakeup_event(node->ws, 0);
+	pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
 
 	skb->data_len = size;
 	skb->len = size;
@@ -929,14 +1006,12 @@ static bool qrtr_must_forward(struct qrtr_node *src,
 	return false;
 }
 
-static void qrtr_fwd_ctrl_pkt(struct sk_buff *skb)
+static void qrtr_fwd_ctrl_pkt(struct qrtr_node *src, struct sk_buff *skb)
 {
 	struct qrtr_node *node;
-	struct qrtr_node *src;
 	struct qrtr_cb *cb = (struct qrtr_cb *)skb->cb;
 
 	qrtr_skb_align_linearize(skb);
-	src = qrtr_node_lookup(cb->src_node);
 	down_read(&qrtr_node_lock);
 	list_for_each_entry(node, &qrtr_all_epts, item) {
 		struct sockaddr_qrtr from;
@@ -961,7 +1036,6 @@ static void qrtr_fwd_ctrl_pkt(struct sk_buff *skb)
 		qrtr_node_enqueue(node, skbn, cb->type, &from, &to, 0);
 	}
 	up_read(&qrtr_node_lock);
-	qrtr_node_release(src);
 }
 
 static void qrtr_fwd_pkt(struct sk_buff *skb, struct qrtr_cb *cb)
@@ -1014,6 +1088,7 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 					      read_data);
 	struct qrtr_ctrl_pkt pkt = {0,};
 	struct sk_buff *skb;
+	int rc;
 
 	while ((skb = skb_dequeue(&node->rx_queue)) != NULL) {
 		struct qrtr_sock *ipc;
@@ -1023,11 +1098,24 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 		qrtr_node_assign(node, cb->src_node);
 
 		if (cb->type != QRTR_TYPE_DATA)
-			qrtr_fwd_ctrl_pkt(skb);
+			qrtr_fwd_ctrl_pkt(node, skb);
 
 		if (cb->type == QRTR_TYPE_NEW_SERVER &&
 		    skb->len == sizeof(pkt)) {
 			skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
+			/**
+			 * Run qrtr filter to drop the restricted new server
+			 * message that is being transmitted from connected soc
+			 */
+			rc = qrtr_run_bpf_filter
+				(skb,
+				 le32_to_cpu(pkt.server.service),
+				 le32_to_cpu(pkt.server.instance),
+				 cb->type, cb->src_node);
+			if (rc) {
+				kfree_skb(skb);
+				continue;
+			}
 			qrtr_node_assign(node, le32_to_cpu(pkt.server.node));
 		}
 
@@ -1042,12 +1130,16 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 			   cb->type == QRTR_TYPE_DATA) {
 			qrtr_fwd_pkt(skb, cb);
 		} else if (cb->type == QRTR_TYPE_DEL_PROC) {
-			qrtr_handle_del_proc(skb);
+			qrtr_handle_del_proc(node, skb);
 		} else {
 			ipc = qrtr_port_lookup(cb->dst_port);
 			if (!ipc) {
 				kfree_skb(skb);
 			} else {
+				if (cb->type == QRTR_TYPE_DEL_SERVER ||
+				    cb->type == QRTR_TYPE_DEL_CLIENT) {
+					qrtr_cleanup_flow_control(node, skb);
+				}
 				qrtr_sock_queue_skb(node, skb, ipc);
 				qrtr_port_put(ipc);
 			}
@@ -1055,14 +1147,87 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 	}
 }
 
-static void qrtr_handle_del_proc(struct sk_buff *skb)
+static void qrtr_cleanup_flow_control(struct qrtr_node *node,
+				      struct sk_buff *skb)
+{
+	struct qrtr_ctrl_pkt *pkt;
+	unsigned long key;
+	void __rcu **slot;
+	struct sockaddr_qrtr src;
+	struct qrtr_tx_flow *flow;
+	struct radix_tree_iter iter;
+	struct qrtr_tx_flow_waiter *waiter;
+	struct qrtr_tx_flow_waiter *temp;
+	u32 cmd;
+
+	pkt = (void *)skb->data;
+	cmd = le32_to_cpu(pkt->cmd);
+
+	if (cmd == QRTR_TYPE_DEL_SERVER) {
+		src.sq_node = le32_to_cpu(pkt->server.node);
+		src.sq_port = le32_to_cpu(pkt->server.port);
+	} else {
+		src.sq_node = le32_to_cpu(pkt->client.node);
+		src.sq_port = le32_to_cpu(pkt->client.port);
+	}
+
+	key = (u64)src.sq_node << 32 | src.sq_port;
+
+	mutex_lock(&node->qrtr_tx_lock);
+	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
+	if (!flow) {
+		mutex_unlock(&node->qrtr_tx_lock);
+		return;
+	}
+
+	list_for_each_entry_safe(waiter, temp, &flow->waiters, node) {
+		list_del(&waiter->node);
+		sock_put(waiter->sk);
+		kfree(waiter);
+	}
+
+	radix_tree_for_each_slot(slot, &node->qrtr_tx_flow, &iter, 0) {
+		if (flow == (struct qrtr_tx_flow *)rcu_dereference(*slot)) {
+			radix_tree_iter_delete(&node->qrtr_tx_flow,
+					       &iter, slot);
+			kfree(flow);
+			break;
+		}
+	}
+	mutex_unlock(&node->qrtr_tx_lock);
+}
+
+static void qrtr_handle_del_proc(struct qrtr_node *node, struct sk_buff *skb)
 {
 	struct sockaddr_qrtr src = {AF_QIPCRTR, 0, QRTR_PORT_CTRL};
 	struct sockaddr_qrtr dst = {AF_QIPCRTR, qrtr_local_nid, QRTR_PORT_CTRL};
 	struct qrtr_ctrl_pkt pkt = {0,};
+	struct qrtr_tx_flow_waiter *waiter;
+	struct qrtr_tx_flow_waiter *temp;
+	struct radix_tree_iter iter;
+	struct qrtr_tx_flow *flow;
+	void __rcu **slot;
+	unsigned long node_id;
 
 	skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 	src.sq_node = le32_to_cpu(pkt.proc.node);
+	/* Free tx flow counters */
+	mutex_lock(&node->qrtr_tx_lock);
+	radix_tree_for_each_slot(slot, &node->qrtr_tx_flow, &iter, 0) {
+		flow = rcu_dereference(*slot);
+		/* extract node id from the index key */
+		node_id = (iter.index & 0xFFFFFFFF00000000) >> 32;
+		if (node_id != src.sq_node)
+			continue;
+		list_for_each_entry_safe(waiter, temp, &flow->waiters, node) {
+			list_del(&waiter->node);
+			sock_put(waiter->sk);
+			kfree(waiter);
+		}
+		radix_tree_iter_delete(&node->qrtr_tx_flow, &iter, slot);
+		kfree(flow);
+	}
+	mutex_unlock(&node->qrtr_tx_lock);
 
 	memset(&pkt, 0, sizeof(pkt));
 	pkt.cmd = cpu_to_le32(QRTR_TYPE_BYE);
@@ -1568,9 +1733,10 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	struct qrtr_ctrl_pkt pkt;
 	struct qrtr_node *node;
 	struct qrtr_node *srv_node;
+	struct service_info *info;
+	u32 type = QRTR_TYPE_DATA;
 	struct sk_buff *skb;
 	size_t plen;
-	u32 type = QRTR_TYPE_DATA;
 	int rc;
 
 	if (msg->msg_flags & ~(MSG_DONTWAIT))
@@ -1641,6 +1807,19 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	if (rc) {
 		kfree_skb(skb);
 		goto out_node;
+	}
+
+	/* look up service information from service radix tree */
+	rc = qrtr_service_lookup(addr->sq_node, addr->sq_port, &info);
+	/* run bpf filter only if the sender is a valid qmi client */
+	if (!rc && ipc->us.sq_port != QRTR_PORT_CTRL) {
+		rc = qrtr_run_bpf_filter(skb, info->service_id,
+					 info->instance_id,
+					 type, 0);
+		if (rc) {
+			kfree_skb(skb);
+			goto out_node;
+		}
 	}
 
 	if (ipc->us.sq_port == QRTR_PORT_CTRL ||
@@ -1715,15 +1894,19 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 			size_t size, int flags)
 {
 	DECLARE_SOCKADDR(struct sockaddr_qrtr *, addr, msg->msg_name);
+	struct qrtr_sock *ipc = qrtr_sk(sock->sk);
+	struct qrtr_ctrl_pkt pkt = {0,};
 	struct sock *sk = sock->sk;
 	struct sk_buff *skb;
 	struct qrtr_cb *cb;
 	int copied, rc;
+	u32 type;
 
 	lock_sock(sk);
 
 	if (sock_flag(sk, SOCK_ZAPPED)) {
 		release_sock(sk);
+		pr_err("%s: Invalid addr error\n", __func__);
 		return -EADDRNOTAVAIL;
 	}
 
@@ -1742,10 +1925,45 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 	}
 
 	rc = skb_copy_datagram_msg(skb, 0, msg, copied);
-	if (rc < 0)
+	if (rc < 0) {
+		pr_err("%s: Failed to copy skb rc[%d]\n", __func__, rc);
 		goto out;
+	}
 	rc = copied;
 
+	if (ipc->us.sq_port == QRTR_PORT_CTRL) {
+		/**
+		 * Load control packet from skb here to know the packet type
+		 * information as packet type on "cb" will be invalid for
+		 * local service.
+		 */
+		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
+		type = le32_to_cpu(pkt.cmd);
+		/**
+		 * add/remove service information to/from service lookup table
+		 * if the control packet is delivering to QRTR_PORT_CTRL
+		 */
+		if (type == QRTR_TYPE_NEW_SERVER) {
+			/**
+			 * Populate port address on control packet from "cb"
+			 * only for local service because port id will be 0
+			 * while sending NEW_SERVER control packet from local
+			 * service.
+			 */
+			if (le32_to_cpu(pkt.server.node) == qrtr_local_nid)
+				pkt.server.port = cpu_to_le32(cb->src_port);
+			qrtr_service_add(&pkt);
+		} else if (type == QRTR_TYPE_DEL_SERVER) {
+			/* Remove this server from lookup table */
+			qrtr_service_remove(&pkt);
+		} else if (type == QRTR_TYPE_BYE) {
+			/**
+			 * Remove all servers under this node from from lookup
+			 * table
+			 */
+			qrtr_service_node_remove(cb->src_node);
+		}
+	}
 	if (addr) {
 		/* There is an anonymous 2-byte hole after sq_family,
 		 * make sure to clear it.
@@ -1837,6 +2055,7 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	struct ifreq ifr;
 	long len = 0;
 	int rc = 0;
+	int ufd;
 
 	lock_sock(sk);
 
@@ -1879,6 +2098,18 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCGIFNETMASK:
 	case SIOCSIFNETMASK:
 		rc = -EINVAL;
+		break;
+	case QRTR_ATTACH_BPF:
+		if (copy_from_user(&ufd, argp, sizeof(ufd))) {
+			rc = -EFAULT;
+			break;
+		}
+
+		rc = qrtr_bpf_filter_attach(ufd);
+		break;
+
+	case QRTR_DETTACH_BPF:
+		rc = qrtr_bpf_filter_detach();
 		break;
 	default:
 		rc = -ENOIOCTLCMD;

@@ -3,7 +3,7 @@
  * MSM 7k High speed uart driver
  *
  * Copyright (c) 2008 Google Inc.
- * Copyright (c) 2007-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2018, 2021 The Linux Foundation. All rights reserved.
  * Modified: Nick Pelly <npelly@google.com>
  *
  * All source code in this file is licensed under the following license
@@ -2004,7 +2004,20 @@ static void msm_hs_sps_rx_callback(struct sps_event_notify *notify)
  */
 static unsigned int msm_hs_get_mctrl_locked(struct uart_port *uport)
 {
-	return TIOCM_DSR | TIOCM_CAR | TIOCM_CTS;
+	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	unsigned int mctrl = TIOCM_DSR | TIOCM_CAR;
+	unsigned int status;
+
+	if (msm_uport->pm_state != MSM_HS_PM_ACTIVE) {
+		MSM_HS_WARN("%s(): Clocks are off\n", __func__);
+		return (mctrl | TIOCM_CTS);
+	}
+
+	status = msm_hs_read(uport, UART_DM_ISR);
+	if (!(status & UARTDM_ISR_CURRENT_CTS_BMSK))
+		mctrl |= TIOCM_CTS;
+
+	return mctrl;
 }
 
 /*
@@ -2864,6 +2877,9 @@ struct msm_serial_hs_platform_data
 		pdata->rx_to_inject = (u8)rx_to_inject;
 	}
 
+	pdata->rx_brk_detect = of_property_read_bool(node,
+					"qcom,rx-break-detect");
+
 	ret = of_property_read_u32(node, "qcom,bam-tx-ep-pipe-index",
 				&pdata->bam_tx_ep_pipe_index);
 	if (ret < 0) {
@@ -3557,16 +3573,19 @@ static int msm_hs_probe(struct platform_device *pdev)
 	mb();
 
 	/*
-	 * Set RX_BREAK_ZERO_CHAR_OFF and RX_ERROR_CHAR_OFF
-	 * so any rx_break and character having parity of framing
-	 * error don't enter inside UART RX FIFO.
+	 * Set RX_BREAK_ZERO_CHAR_OFF and RX_ERROR_CHAR_OFF so
+	 * any rx_break and character having parity of framing error
+	 * don't enter inside UART RX FIFO if "qcom,rx-break-detect"
+	 * flag is not set.
 	 */
-	data = msm_hs_read(uport, UART_DM_MR2);
-	data |= (UARTDM_MR2_RX_BREAK_ZERO_CHAR_OFF |
-			UARTDM_MR2_RX_ERROR_CHAR_OFF);
-	msm_hs_write(uport, UART_DM_MR2, data);
-	/* Ensure register IO completion */
-	mb();
+	if (!(pdata->rx_brk_detect)) {
+		data = msm_hs_read(uport, UART_DM_MR2);
+		data |= (UARTDM_MR2_RX_BREAK_ZERO_CHAR_OFF |
+				UARTDM_MR2_RX_ERROR_CHAR_OFF);
+		msm_hs_write(uport, UART_DM_MR2, data);
+		/* Ensure register IO completion */
+		mb();
+	}
 
 	ret = sysfs_create_file(&pdev->dev.kobj, &dev_attr_clock.attr);
 	if (unlikely(ret)) {

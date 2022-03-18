@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -147,6 +147,8 @@ struct geni_i2c_dev {
 	struct geni_i2c_ssr i2c_ssr;
 	u32 dbg_num;
 	struct dbg_buf_ctxt *dbg_buf_ptr;
+	bool bus_recovery_enable;
+	bool disable_dma_mode;
 };
 
 static void ssr_i2c_force_suspend(struct device *dev);
@@ -232,6 +234,13 @@ static inline void qcom_geni_i2c_calc_timeout(struct geni_i2c_dev *gi2c)
 
 static void geni_i2c_err(struct geni_i2c_dev *gi2c, int err)
 {
+
+	if (gi2c->cur)
+		GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
+			"len:%d, slv-addr:0x%x, RD/WR:%d timeout:%u\n",
+			gi2c->cur->len, gi2c->cur->addr, gi2c->cur->flags,
+			gi2c->xfer_timeout);
+
 	if (err == I2C_NACK || err == GENI_ABORT_DONE) {
 		GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n",
 			     gi2c_log[err].msg);
@@ -243,6 +252,59 @@ static void geni_i2c_err(struct geni_i2c_dev *gi2c, int err)
 	geni_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base, gi2c->ipcl);
 err_ret:
 	gi2c->err = gi2c_log[err].err;
+}
+
+static bool geni_i2c_is_bus_recovery_required(struct geni_i2c_dev *gi2c)
+{
+	u32 geni_ios = readl_relaxed(gi2c->base + SE_GENI_IOS);
+
+	/*
+	 * SE_GENI_IOS will show I2C CLK/SDA line status, BIT 0 is SDA and
+	 * BIT 1 is clk status. SE_GENI_IOS register set when CLK/SDA line
+	 * is pulled high.
+	 */
+	return (((geni_ios & 1) == 0) && (gi2c->err == I2C_BUS_PROTO ||
+		gi2c->err == I2C_ARB_LOST || gi2c->err == GENI_TIMEOUT));
+}
+
+static void geni_i2c_bus_recovery(struct geni_i2c_dev *gi2c)
+{
+	bool error = false;
+
+	reinit_completion(&gi2c->xfer);
+	geni_setup_m_cmd(gi2c->base, I2C_BUS_CLEAR, 0);
+
+	if (!wait_for_completion_timeout(&gi2c->xfer, HZ)) {
+		error = true;
+		GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
+				"Bus clear command failed\n");
+		geni_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base, gi2c->ipcl);
+		gi2c->cur = NULL;
+		reinit_completion(&gi2c->xfer);
+		geni_abort_m_cmd(gi2c->base);
+		if (!wait_for_completion_timeout(&gi2c->xfer, HZ))
+			GENI_SE_ERR(gi2c->ipcl, false, gi2c->dev,
+				"Abort failed\n", __func__);
+	}
+
+	reinit_completion(&gi2c->xfer);
+	geni_setup_m_cmd(gi2c->base, I2C_STOP_ON_BUS, 0);
+	if (!wait_for_completion_timeout(&gi2c->xfer, HZ)) {
+		error = true;
+		GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
+			"Stop on bus command failed\n");
+		gi2c->cur = NULL;
+		reinit_completion(&gi2c->xfer);
+		geni_abort_m_cmd(gi2c->base);
+		if (!wait_for_completion_timeout(&gi2c->xfer, HZ))
+			GENI_SE_ERR(gi2c->ipcl, false, gi2c->dev,
+				"%s Abort failed\n", __func__);
+	}
+	if (error)
+		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+					"Bus recovery failed\n");
+	else
+		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev, "Bus recovery done\n");
 }
 
 static irqreturn_t geni_i2c_irq(int irq, void *dev)
@@ -768,6 +830,15 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 		gi2c->cur = &msgs[i];
 		qcom_geni_i2c_calc_timeout(gi2c);
 		mode = msgs[i].len > 32 ? SE_DMA : FIFO_MODE;
+
+		/* Complete the transfer in FIFO mode if DMA mode
+		 * is not supported for some Automotive platform.
+		 */
+		if (gi2c->disable_dma_mode) {
+			GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
+					"Disable DMA mode\n");
+			mode = FIFO_MODE;
+		}
 		ret = geni_se_select_mode(gi2c->base, mode);
 		if (ret) {
 			dev_err(gi2c->dev, "%s: Error mode init %d:%d:%d\n",
@@ -885,6 +956,12 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 		if (gi2c->err) {
 			GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
 				"i2c error :%d\n", gi2c->err);
+			if (gi2c->bus_recovery_enable &&
+				geni_i2c_is_bus_recovery_required(gi2c)) {
+				GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
+					"SDA Line stuck\n", gi2c->err);
+				geni_i2c_bus_recovery(gi2c);
+			}
 			break;
 		}
 	}
@@ -942,14 +1019,14 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	wrapper_ph_node = of_parse_phandle(pdev->dev.of_node,
 				"qcom,wrapper-core", 0);
 	if (IS_ERR_OR_NULL(wrapper_ph_node)) {
-		ret = PTR_ERR(wrapper_ph_node);
+		ret = PTR_ERR(wrapper_ph_node) ?: -ENODEV;
 		dev_err(&pdev->dev, "No wrapper core defined\n");
 		return ret;
 	}
 	wrapper_pdev = of_find_device_by_node(wrapper_ph_node);
 	of_node_put(wrapper_ph_node);
 	if (IS_ERR_OR_NULL(wrapper_pdev)) {
-		ret = PTR_ERR(wrapper_pdev);
+		ret = PTR_ERR(wrapper_pdev) ?: -ENODEV;
 		dev_err(&pdev->dev, "Cannot retrieve wrapper device\n");
 		return ret;
 	}
@@ -965,31 +1042,31 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	gi2c->i2c_rsc.ctrl_dev = gi2c->dev;
 	gi2c->i2c_rsc.se_clk = devm_clk_get(&pdev->dev, "se-clk");
 	if (IS_ERR(gi2c->i2c_rsc.se_clk)) {
-		ret = PTR_ERR(gi2c->i2c_rsc.se_clk);
+		ret = PTR_ERR(gi2c->i2c_rsc.se_clk) ?: -ENODEV;
 		dev_err(&pdev->dev, "Err getting SE Core clk %d\n", ret);
 		return ret;
 	}
 	gi2c->i2c_rsc.m_ahb_clk = devm_clk_get(&pdev->dev, "m-ahb");
 	if (IS_ERR(gi2c->i2c_rsc.m_ahb_clk)) {
-		ret = PTR_ERR(gi2c->i2c_rsc.m_ahb_clk);
+		ret = PTR_ERR(gi2c->i2c_rsc.m_ahb_clk) ?: -ENODEV;
 		dev_err(&pdev->dev, "Err getting M AHB clk %d\n", ret);
 		return ret;
 	}
 	gi2c->i2c_rsc.s_ahb_clk = devm_clk_get(&pdev->dev, "s-ahb");
 	if (IS_ERR(gi2c->i2c_rsc.s_ahb_clk)) {
-		ret = PTR_ERR(gi2c->i2c_rsc.s_ahb_clk);
+		ret = PTR_ERR(gi2c->i2c_rsc.s_ahb_clk) ?: -ENODEV;
 		dev_err(&pdev->dev, "Err getting S AHB clk %d\n", ret);
 		return ret;
 	}
 
 	gi2c->base = devm_ioremap_resource(gi2c->dev, res);
 	if (IS_ERR(gi2c->base))
-		return PTR_ERR(gi2c->base);
+		return PTR_ERR(gi2c->base) ?: -ENODEV;
 
 	gi2c->i2c_rsc.geni_pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR_OR_NULL(gi2c->i2c_rsc.geni_pinctrl)) {
 		dev_err(&pdev->dev, "No pinctrl config specified\n");
-		ret = PTR_ERR(gi2c->i2c_rsc.geni_pinctrl);
+		ret = PTR_ERR(gi2c->i2c_rsc.geni_pinctrl) ?: -EINVAL;
 		return ret;
 	}
 	gi2c->i2c_rsc.geni_gpio_active =
@@ -997,7 +1074,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 							PINCTRL_DEFAULT);
 	if (IS_ERR_OR_NULL(gi2c->i2c_rsc.geni_gpio_active)) {
 		dev_err(&pdev->dev, "No default config specified\n");
-		ret = PTR_ERR(gi2c->i2c_rsc.geni_gpio_active);
+		ret = PTR_ERR(gi2c->i2c_rsc.geni_gpio_active) ?: -EINVAL;
 		return ret;
 	}
 	gi2c->i2c_rsc.geni_gpio_sleep =
@@ -1005,7 +1082,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 							PINCTRL_SLEEP);
 	if (IS_ERR_OR_NULL(gi2c->i2c_rsc.geni_gpio_sleep)) {
 		dev_err(&pdev->dev, "No sleep config specified\n");
-		ret = PTR_ERR(gi2c->i2c_rsc.geni_gpio_sleep);
+		ret = PTR_ERR(gi2c->i2c_rsc.geni_gpio_sleep) ?: -EINVAL;
 		return ret;
 	}
 
@@ -1034,6 +1111,9 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "Bus frequency is set to %dHz.\n",
 						gi2c->i2c_rsc.clk_freq_out);
 
+	gi2c->disable_dma_mode = of_property_read_bool(pdev->dev.of_node,
+					"qcom,disable-dma");
+
 	gi2c->irq = platform_get_irq(pdev, 0);
 	if (gi2c->irq < 0) {
 		dev_err(gi2c->dev, "IRQ error for i2c-geni\n");
@@ -1051,6 +1131,8 @@ static int geni_i2c_probe(struct platform_device *pdev)
 
 	gi2c->adap.algo = &geni_i2c_algo;
 	init_completion(&gi2c->xfer);
+	gi2c->bus_recovery_enable = of_property_read_bool(pdev->dev.of_node,
+			"qcom,bus-recovery");
 	platform_set_drvdata(pdev, gi2c);
 	ret = devm_request_irq(gi2c->dev, gi2c->irq, geni_i2c_irq,
 			       IRQF_TRIGGER_HIGH, "i2c_geni", gi2c);

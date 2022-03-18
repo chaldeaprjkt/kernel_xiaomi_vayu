@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,6 +11,9 @@
  *
  */
 #include "hab.h"
+
+#define CREATE_TRACE_POINTS
+#include "hab_trace_os.h"
 
 #define HAB_DEVICE_CNSTR(__name__, __id__, __num__) { \
 	.name = __name__,\
@@ -126,7 +129,9 @@ void hab_ctx_free(struct kref *ref)
 		pr_debug("potential leak exp %d vcid %X recovered\n",
 				exp->export_id, exp->vcid_local);
 		habmem_hyp_revoke(exp->payload, exp->payload_count);
+		write_unlock_bh(&ctx->exp_lock);
 		habmem_remove_export(exp);
+		write_lock_bh(&ctx->exp_lock);
 	}
 	write_unlock_bh(&ctx->exp_lock);
 
@@ -562,6 +567,9 @@ long hab_vchan_send(struct uhab_context *ctx,
 		goto err;
 	}
 
+	/* log msg send timestamp: enter hab_vchan_send */
+	trace_hab_vchan_send_start(vchan);
+
 	HAB_HEADER_SET_SIZE(header, sizebytes);
 	if (flags & HABMM_SOCKET_SEND_FLAGS_XING_VM_STAT) {
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_PROFILE);
@@ -576,8 +584,20 @@ long hab_vchan_send(struct uhab_context *ctx,
 	} else if (flags & HABMM_SOCKET_XVM_SCHE_TEST_ACK) {
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_SCHE_MSG_ACK);
 	} else if (flags & HABMM_SOCKET_XVM_SCHE_RESULT_REQ) {
+		if (sizebytes < sizeof(unsigned long long)) {
+			pr_err("Message buffer too small, %lu bytes, expect %d\n",
+				sizebytes,
+				sizeof(unsigned long long));
+			return -EINVAL;
+		}
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_SCHE_RESULT_REQ);
 	} else if (flags & HABMM_SOCKET_XVM_SCHE_RESULT_RSP) {
+		if (sizebytes < 3 * sizeof(unsigned long long)) {
+			pr_err("Message buffer too small, %lu bytes, expect %d\n",
+				sizebytes,
+				3 * sizeof(unsigned long long));
+			return -EINVAL;
+		}
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_SCHE_RESULT_RSP);
 	} else {
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_MSG);
@@ -595,6 +615,10 @@ long hab_vchan_send(struct uhab_context *ctx,
 		schedule();
 	}
 err:
+
+	/* log msg send timestamp: exit hab_vchan_send */
+	trace_hab_vchan_send_done(vchan);
+
 	if (vchan)
 		hab_vchan_put(vchan);
 
@@ -635,6 +659,9 @@ int hab_vchan_recv(struct uhab_context *ctx,
 			ret = -ENODEV;
 		else if (ret == -ERESTARTSYS)
 			ret = -EINTR;
+	} else {
+		/* log msg recv timestamp: exit hab_vchan_recv */
+		trace_hab_vchan_recv_done(vchan, *message);
 	}
 
 	hab_vchan_put(vchan);

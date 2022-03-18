@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018, Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2018, 2021, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -265,9 +265,13 @@ static int msm_snps_phy_block_reset(struct msm_snps_hsphy *phy)
 static void msm_snps_hsphy_por(struct msm_snps_hsphy *phy)
 {
 	struct hsphy_reg_val *reg = NULL;
-	u32 aseq[20];
+	u32 aseq[100];
 	u32 *seq, tmp;
 
+	/*
+	 * Enter PHY init sequence in series of tuples (offset, val, delay).
+	 * Keep a (-1, -1, 0) to denote the end of the sequence.
+	 */
 	if (override_phy_init) {
 		dev_dbg(phy->phy.dev, "Override HS PHY Init:%s\n",
 							override_phy_init);
@@ -438,6 +442,7 @@ static int msm_snps_hsphy_set_suspend(struct usb_phy *uphy, int suspend)
 		if (phy->cable_connected) {
 			msm_snps_hsphy_enable_clocks(phy);
 			msm_snps_hsphy_disable_hv_interrupts(phy);
+			msm_snps_hsphy_init(uphy);
 		} else {
 			msm_snps_hsphy_enable_regulators(phy);
 			msm_snps_hsphy_enable_clocks(phy);

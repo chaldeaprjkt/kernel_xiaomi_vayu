@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -69,6 +69,7 @@
 #define DIAG_IOCTL_QUERY_PD_LOGGING	39
 #define DIAG_IOCTL_QUERY_CON_ALL	40
 #define DIAG_IOCTL_QUERY_MD_PID	41
+#define DIAG_IOCTL_MDM_HDLC_TOGGLE	44
 
 /* PC Tools IDs */
 #define APQ8060_TOOLS_ID	4062
@@ -148,8 +149,8 @@
 /* This needs to be modified manually now, when we add
  * a new RANGE of SSIDs to the msg_mask_tbl.
  */
-#define MSG_MASK_TBL_CNT		26
-#define APPS_EVENT_LAST_ID		0xCCD
+#define MSG_MASK_TBL_CNT		27
+#define APPS_EVENT_LAST_ID		0xD02
 
 #define MSG_SSID_0			0
 #define MSG_SSID_0_LAST			134
@@ -201,8 +202,10 @@
 #define MSG_SSID_23_LAST		10416
 #define MSG_SSID_24			10500
 #define MSG_SSID_24_LAST		10505
-#define MSG_SSID_25			0xC000
-#define MSG_SSID_25_LAST		0xC063
+#define MSG_SSID_25			10600
+#define MSG_SSID_25_LAST		10620
+#define MSG_SSID_26			0xC000
+#define MSG_SSID_26_LAST		0xC063
 
 static const uint32_t msg_bld_masks_0[] = {
 	MSG_LVL_LOW,
@@ -922,13 +925,39 @@ static const uint32_t msg_bld_masks_24[] = {
 };
 
 static const uint32_t msg_bld_masks_25[] = {
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW | MSG_MASK_5 | MSG_MASK_6 | MSG_MASK_7 |
+		MSG_MASK_8 | MSG_MASK_9 | MSG_MASK_10 | MSG_MASK_11,
+	MSG_LVL_LOW | MSG_MASK_5 | MSG_MASK_6 | MSG_MASK_7 |
+		MSG_MASK_8 | MSG_MASK_9 | MSG_MASK_10,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW,
+	MSG_LVL_LOW
+};
+
+static const uint32_t msg_bld_masks_26[] = {
 	MSG_LVL_LOW
 };
 
 /* LOG CODES */
 static const uint32_t log_code_last_tbl[] = {
 	0x0,	/* EQUIP ID 0 */
-	0x1CE8,	/* EQUIP ID 1 */
+	0x1D92,	/* EQUIP ID 1 */
 	0x0,	/* EQUIP ID 2 */
 	0x0,	/* EQUIP ID 3 */
 	0x4910,	/* EQUIP ID 4 */

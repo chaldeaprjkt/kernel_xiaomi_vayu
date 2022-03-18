@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,7 +31,10 @@
 #define MHI_SM_FUNC_ENTRY() MHI_SM_DBG("ENTRY\n")
 #define MHI_SM_FUNC_EXIT() MHI_SM_DBG("EXIT\n")
 
-#define PCIE_EP_TIMER_US	500000000
+#define PCIE_EP_TIMER_US		500000000
+#define MHI_IPA_DISABLE_DELAY_MS	10
+#define MHI_IPA_DISABLE_COUNTER		20
+
 
 static inline const char *mhi_sm_dev_event_str(enum mhi_dev_event state)
 {
@@ -525,12 +528,6 @@ static int mhi_sm_prepare_resume(void)
 			}
 		}
 
-		res = mhi_dev_resume(mhi_sm_ctx->mhi_dev);
-		if (res) {
-			MHI_SM_ERR("Failed resuming mhi core: %d", res);
-			goto exit;
-		}
-
 		res = ipa_mhi_resume();
 		if (res) {
 			MHI_SM_ERR("Failed resuming ipa_mhi:%d", res);
@@ -550,11 +547,27 @@ static int mhi_sm_prepare_resume(void)
 		/* Send state change notification only if we were in M3 state */
 		res = mhi_dev_send_state_change_event(mhi_sm_ctx->mhi_dev,
 				MHI_DEV_M0_STATE);
-	if (res) {
-		MHI_SM_ERR("Failed to send event %s to host, returned %d\n",
-			mhi_sm_dev_event_str(MHI_DEV_EVENT_M0_STATE), res);
-		goto exit;
+		if (res) {
+			MHI_SM_ERR("Failed to send event %s to host, ret =%d\n",
+				mhi_sm_dev_event_str(MHI_DEV_EVENT_M0_STATE),
+				res);
+			goto exit;
+		}
 	}
+
+	/*
+	 * Defer mhi resume till M0 ack is notified to host.
+	 * This is to ensure no outstanding transfer completion events are send
+	 * to host before M0 ack.
+	 */
+	if ((old_state == MHI_DEV_M3_STATE) ||
+		(old_state == MHI_DEV_M2_STATE)) {
+		res = mhi_dev_resume(mhi_sm_ctx->mhi_dev);
+		if (res) {
+			MHI_SM_ERR("Failed resuming mhi core, returned %d",
+				res);
+			goto exit;
+		}
 	}
 
 	if (old_state == MHI_DEV_READY_STATE) {
@@ -600,7 +613,7 @@ static int mhi_sm_prepare_suspend(enum mhi_dev_state new_state)
 {
 	enum mhi_dev_state old_state;
 	struct ep_pcie_inactivity inact_param;
-	int res = 0, rc;
+	int res = 0, rc, wait_timeout = 0;
 
 	MHI_SM_DBG("Switching event:%d\n", new_state);
 
@@ -677,11 +690,24 @@ static int mhi_sm_prepare_suspend(enum mhi_dev_state new_state)
 			 (new_state == MHI_DEV_M3_STATE))) {
 		if (mhi_sm_ctx->mhi_dev->use_ipa) {
 			MHI_SM_DBG("Disable IPA with ipa_dma_disable()\n");
-			res = ipa_dma_disable();
-			if (res) {
-				MHI_SM_ERR("IPA disable failed\n");
+			while (wait_timeout < MHI_IPA_DISABLE_COUNTER) {
+				/* wait for the disable to finish */
+				res = ipa_dma_disable();
+				if (!res)
+					break;
+				MHI_SM_ERR
+					("IPA disable fail cnt:%d\n",
+						wait_timeout);
+				msleep(MHI_IPA_DISABLE_DELAY_MS);
+				wait_timeout++;
+			}
+
+			if (wait_timeout >= MHI_IPA_DISABLE_COUNTER) {
+				MHI_SM_ERR
+					("Fail to disable IPA for M3\n");
 				goto exit;
 			}
+			MHI_SM_ERR("IPA DMA successfully disabled\n");
 		}
 	}
 
@@ -1439,7 +1465,7 @@ void mhi_dev_sm_pcie_handler(struct ep_pcie_notify *notify)
 
 	dstate_change_evt->event = event;
 	INIT_WORK(&dstate_change_evt->work, mhi_sm_pcie_event_manager);
-	queue_work(mhi_sm_ctx->mhi_sm_wq, &dstate_change_evt->work);
+	queue_work(system_highpri_wq, &dstate_change_evt->work);
 	atomic_inc(&mhi_sm_ctx->pending_pcie_events);
 
 exit:

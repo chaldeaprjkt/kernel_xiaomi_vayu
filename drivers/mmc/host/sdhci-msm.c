@@ -2,7 +2,7 @@
  * drivers/mmc/host/sdhci-msm.c - Qualcomm Technologies, Inc. MSM SDHCI Platform
  * driver source file
  *
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1226,12 +1226,6 @@ int sdhci_msm_execute_tuning(struct sdhci_host *host, u32 opcode)
 		(ios.timing == MMC_TIMING_MMC_HS200) ||
 		(ios.timing == MMC_TIMING_UHS_SDR104)))
 		return 0;
-
-	/*
-	 * Clear tuning_done flag before tuning to ensure proper
-	 * HS400 settings.
-	 */
-	msm_host->tuning_done = 0;
 
 	/*
 	 * Don't allow re-tuning for CRC errors observed for any commands
@@ -2490,7 +2484,7 @@ static int sdhci_msm_vreg_enable(struct sdhci_msm_reg_data *vreg)
 
 	if (!vreg->is_enabled) {
 		/* Set voltage level */
-		ret = sdhci_msm_vreg_set_voltage(vreg, vreg->high_vol_level,
+		ret = sdhci_msm_vreg_set_voltage(vreg, vreg->low_vol_level,
 						vreg->high_vol_level);
 		if (ret)
 			return ret;
@@ -3821,14 +3815,14 @@ void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 			msm_host_offset->CORE_DLL_STATUS),
 		readl_relaxed(host->ioaddr +
 			msm_host_offset->CORE_DLL_CONFIG),
-		sdhci_msm_readl_relaxed(host,
+		readl_relaxed(host->ioaddr +
 			msm_host_offset->CORE_DLL_CONFIG_2));
 	pr_info("DLL cfg3: 0x%08x | DLL usr ctl:  0x%08x | DDR cfg: 0x%08x\n",
 		readl_relaxed(host->ioaddr +
 			msm_host_offset->CORE_DLL_CONFIG_3),
 		readl_relaxed(host->ioaddr +
 			msm_host_offset->CORE_DLL_USR_CTL),
-		sdhci_msm_readl_relaxed(host,
+		readl_relaxed(host->ioaddr +
 			msm_host_offset->CORE_DDR_CONFIG));
 	pr_info("SDCC ver: 0x%08x | Vndr adma err : addr0: 0x%08x addr1: 0x%08x\n",
 		readl_relaxed(host->ioaddr +
@@ -4612,7 +4606,7 @@ static void sdhci_set_default_hw_caps(struct sdhci_msm_host *msm_host,
 	 * starts coming.
 	 */
 	if ((major == 1) && ((minor == 0x42) || (minor == 0x46) ||
-				(minor == 0x49) || (minor >= 0x6b)))
+			(minor == 0x49) || (minor == 0x4D) || (minor >= 0x6b)))
 		msm_host->use_14lpp_dll = true;
 
 	/* Fake 3.0V support for SDIO devices which requires such voltage */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -114,8 +114,8 @@
 #define PCIE20_CAP_LINKCTRLSTATUS      0x80
 #define PCIE20_DEVICE_CONTROL2_STATUS2 0x98
 #define PCIE20_LINK_CONTROL2_LINK_STATUS2 0xA0
-#define PCIE20_L1SUB_CAPABILITY        0x154
-#define PCIE20_L1SUB_CONTROL1          0x158
+#define PCIE20_L1SUB_CAPABILITY        0x234
+#define PCIE20_L1SUB_CONTROL1          0x238
 #define PCIE20_BUS_DISCONNECT_STATUS   0x68c
 #define PCIE20_ACK_F_ASPM_CTRL_REG     0x70C
 #define PCIE20_MASK_ACK_N_FTS          0xff00
@@ -196,6 +196,7 @@
 #define EP_PCIE_OATU_INDEX_MSI 1
 #define EP_PCIE_OATU_INDEX_CTRL 2
 #define EP_PCIE_OATU_INDEX_DATA 3
+#define EP_PCIE_OATU_INDEX_IPA_MSI 4
 
 #define EP_PCIE_OATU_UPPER 0x100
 
@@ -415,6 +416,8 @@ struct ep_pcie_dev_t {
 	bool                         client_ready;
 	atomic_t		     ep_pcie_dev_wake;
 	atomic_t                     perst_deast;
+	atomic_t                     host_wake_pending;
+	bool			     conf_ipa_msi_iatu;
 
 	struct ep_pcie_register_event *event_reg;
 	struct work_struct	     handle_perst_work;

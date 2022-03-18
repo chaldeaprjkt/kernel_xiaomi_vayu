@@ -33,11 +33,27 @@
 
 #define MII_BUSY 0x00000001
 #define MII_WRITE 0x00000002
+#define MII_DATA_MASK GENMASK(15, 0)
 
 /* GMAC4 defines */
 #define MII_GMAC4_GOC_SHIFT		2
+#define MII_GMAC4_REG_ADDR_SHIFT	16
 #define MII_GMAC4_WRITE			(1 << MII_GMAC4_GOC_SHIFT)
 #define MII_GMAC4_READ			(3 << MII_GMAC4_GOC_SHIFT)
+#define MII_GMAC4_C45E			BIT(1)
+
+static void stmmac_mdio_c45_setup(struct stmmac_priv *priv, int phyreg,
+				  u32 *val, u32 *data)
+{
+	unsigned int reg_shift = priv->hw->mii.reg_shift;
+	unsigned int reg_mask = priv->hw->mii.reg_mask;
+
+	*val |= MII_GMAC4_C45E;
+	*val &= ~reg_mask;
+	*val |= ((phyreg >> MII_DEVADDR_C45_SHIFT) << reg_shift) & reg_mask;
+
+	*data |= (phyreg & MII_REGADDR_C45_MASK) << MII_GMAC4_REG_ADDR_SHIFT;
+}
 
 /**
  * stmmac_mdio_read
@@ -56,7 +72,7 @@ static int stmmac_mdio_read(struct mii_bus *bus, int phyaddr, int phyreg)
 	unsigned int mii_address = priv->hw->mii.addr;
 	unsigned int mii_data = priv->hw->mii.data;
 	u32 v;
-	int data;
+	int data = 0;
 	u32 value = MII_BUSY;
 
 	value |= (phyaddr << priv->hw->mii.addr_shift)
@@ -64,23 +80,38 @@ static int stmmac_mdio_read(struct mii_bus *bus, int phyaddr, int phyreg)
 	value |= (phyreg << priv->hw->mii.reg_shift) & priv->hw->mii.reg_mask;
 	value |= (priv->clk_csr << priv->hw->mii.clk_csr_shift)
 		& priv->hw->mii.clk_csr_mask;
-	if (priv->plat->has_gmac4)
+	if (priv->plat->has_gmac4) {
 		value |= MII_GMAC4_READ;
+		if (phyreg & MII_ADDR_C45)
+			stmmac_mdio_c45_setup(priv, phyreg, &value, &data);
+	}
+
+	if (priv->plat->update_ahb_clk_cfg)
+		priv->plat->update_ahb_clk_cfg(priv, 1, 0);
 
 	if (readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
 			       100, 10000))
-		return -EBUSY;
+		goto out;
 
+	writel_relaxed(data, priv->ioaddr + mii_data);
 	writel(value, priv->ioaddr + mii_address);
 
 	if (readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
 			       100, 10000))
-		return -EBUSY;
+		goto out;
+
+	if (priv->plat->update_ahb_clk_cfg)
+		priv->plat->update_ahb_clk_cfg(priv, 0, 0);
 
 	/* Read the data from the MII data register */
-	data = (int)readl(priv->ioaddr + mii_data);
+	data = (int)readl_relaxed(priv->ioaddr + mii_data) & MII_DATA_MASK;
 
 	return data;
+
+out:
+	if (priv->plat->update_ahb_clk_cfg)
+		priv->plat->update_ahb_clk_cfg(priv, 0, 0);
+	return -EBUSY;
 }
 
 /**
@@ -100,6 +131,8 @@ static int stmmac_mdio_write(struct mii_bus *bus, int phyaddr, int phyreg,
 	unsigned int mii_data = priv->hw->mii.data;
 	u32 v;
 	u32 value = MII_BUSY;
+	int data = phydata;
+	int ret;
 
 	value |= (phyaddr << priv->hw->mii.addr_shift)
 		& priv->hw->mii.addr_mask;
@@ -107,23 +140,41 @@ static int stmmac_mdio_write(struct mii_bus *bus, int phyaddr, int phyreg,
 
 	value |= (priv->clk_csr << priv->hw->mii.clk_csr_shift)
 		& priv->hw->mii.clk_csr_mask;
-	if (priv->plat->has_gmac4)
+	if (priv->plat->has_gmac4) {
 		value |= MII_GMAC4_WRITE;
-	else
+		if (phyreg & MII_ADDR_C45)
+			stmmac_mdio_c45_setup(priv, phyreg, &value, &data);
+	} else {
 		value |= MII_WRITE;
+	}
+
+	if (priv->plat->update_ahb_clk_cfg)
+		priv->plat->update_ahb_clk_cfg(priv, 1, 0);
 
 	/* Wait until any existing MII operation is complete */
 	if (readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
 			       100, 10000))
-		return -EBUSY;
+		goto out;
 
 	/* Set the MII address register to write */
-	writel(phydata, priv->ioaddr + mii_data);
+	writel_relaxed(data, priv->ioaddr + mii_data);
 	writel(value, priv->ioaddr + mii_address);
 
 	/* Wait until any existing MII operation is complete */
-	return readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
-				  100, 10000);
+	ret = readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
+				 100, 10000);
+	if (ret)
+		goto out;
+
+	if (priv->plat->update_ahb_clk_cfg)
+		priv->plat->update_ahb_clk_cfg(priv, 0, 0);
+
+	return ret;
+
+out:
+	if (priv->plat->update_ahb_clk_cfg)
+		priv->plat->update_ahb_clk_cfg(priv, 0, 0);
+	return -EBUSY;
 }
 
 /**
@@ -205,8 +256,11 @@ int stmmac_mdio_register(struct net_device *ndev)
 	struct stmmac_priv *priv = netdev_priv(ndev);
 	struct stmmac_mdio_bus_data *mdio_bus_data = priv->plat->mdio_bus_data;
 	struct device_node *mdio_node = priv->plat->mdio_node;
+	struct device_node *np = priv->device->of_node;
 	struct device *dev = ndev->dev.parent;
-	int addr, found;
+	struct phy_device *phydev;
+	int addr, found, skip_phy_detect = 0;
+	unsigned int phyaddr;
 
 	if (!mdio_bus_data)
 		return 0;
@@ -231,7 +285,22 @@ int stmmac_mdio_register(struct net_device *ndev)
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%s-%x",
 		 new_bus->name, priv->plat->bus_id);
 	new_bus->priv = ndev;
-	new_bus->phy_mask = mdio_bus_data->phy_mask;
+
+	err = of_property_read_u32(np, "emac-phy-addr", &phyaddr);
+	if (err) {
+		new_bus->phy_mask = mdio_bus_data->phy_mask;
+	} else {
+		err = new_bus->read(new_bus, phyaddr, MII_BMSR);
+		if (err == -EBUSY || !err || err == 0xffff) {
+			dev_warn(dev, "Invalid PHY address read from dtsi: %d",
+				 phyaddr);
+			new_bus->phy_mask = mdio_bus_data->phy_mask;
+		} else {
+			new_bus->phy_mask = ~(1 << phyaddr);
+			skip_phy_detect = 1;
+		}
+	}
+
 	new_bus->parent = priv->device;
 
 	if (mdio_node)
@@ -243,12 +312,25 @@ int stmmac_mdio_register(struct net_device *ndev)
 		goto bus_register_fail;
 	}
 
+	if (skip_phy_detect) {
+		phydev = mdiobus_get_phy(new_bus, phyaddr);
+		if (!phydev || phydev->phy_id == 0xffff) {
+			dev_err(dev, "Cannot attach phy addr %d from dtsi",
+				phyaddr);
+		} else {
+			priv->plat->phy_addr = phyaddr;
+			priv->phydev = phydev;
+			phy_attached_info(phydev);
+			goto bus_register_done;
+		}
+	}
+
 	if (priv->plat->phy_node || mdio_node)
 		goto bus_register_done;
 
 	found = 0;
 	for (addr = 0; addr < PHY_MAX_ADDR; addr++) {
-		struct phy_device *phydev = mdiobus_get_phy(new_bus, addr);
+		phydev = mdiobus_get_phy(new_bus, addr);
 
 		if (!phydev || phydev->phy_id == 0xffff)
 			continue;
@@ -274,6 +356,7 @@ int stmmac_mdio_register(struct net_device *ndev)
 		priv->phydev = phydev;
 		phy_attached_info(phydev);
 		found = 1;
+		break;
 	}
 
 	if (!found && !mdio_node) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -66,6 +66,12 @@ enum hab_payload_type {
 
 /* make sure concascaded name is less than this value */
 #define MAX_VMID_NAME_SIZE 30
+
+/*
+ * The maximum value of payload_count in struct export_desc
+ * Max u32_t size_bytes from hab_ioctl.h(0xFFFFFFFF) / page size(0x1000)
+ */
+#define MAX_EXP_PAYLOAD_COUNT 0xFFFFF
 
 #define HABCFG_FILE_SIZE_MAX   256
 #define HABCFG_MMID_AREA_MAX   (MM_ID_MAX/100)
@@ -232,6 +238,7 @@ struct hab_export_ack_recvd {
 struct hab_message {
 	struct list_head node;
 	size_t sizebytes;
+	uint32_t sequence_rx;
 	uint32_t data[];
 };
 

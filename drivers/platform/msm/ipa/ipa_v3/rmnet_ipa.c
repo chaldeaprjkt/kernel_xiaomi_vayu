@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2926,8 +2926,9 @@ static int ipa3_wwan_remove(struct platform_device *pdev)
 	if (ipa3_rmnet_res.ipa_napi_enable)
 		netif_napi_del(&(rmnet_ipa3_ctx->wwan_priv->napi));
 	mutex_unlock(&rmnet_ipa3_ctx->pipe_handle_guard);
-	IPAWANINFO("rmnet_ipa unregister_netdev\n");
+	IPAWANDBG("rmnet_ipa unregister_netdev started\n");
 	unregister_netdev(IPA_NETDEV());
+	IPAWANDBG("rmnet_ipa unregister_netdev completed\n");
 	if (ipa3_ctx->use_ipa_pm)
 		ipa3_wwan_deregister_netdev_pm_client();
 	else
@@ -3148,13 +3149,13 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 		break;
 	case SUBSYS_AFTER_SHUTDOWN:
 		IPAWANINFO("IPA Received MPSS AFTER_SHUTDOWN\n");
+		ipa3_set_modem_up(false);
 		if (atomic_read(&rmnet_ipa3_ctx->is_ssr) &&
 			ipa3_ctx->ipa_hw_type < IPA_HW_v4_0)
 			ipa3_q6_post_shutdown_cleanup();
 
 		if (ipa3_ctx->ipa_endp_delay_wa)
 			ipa3_client_prod_post_shutdown_cleanup();
-
 		IPAWANINFO("IPA AFTER_SHUTDOWN handling is complete\n");
 		break;
 	case SUBSYS_BEFORE_POWERUP:
@@ -3166,11 +3167,15 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 		}
 		/* hold a proxy vote for the modem. */
 		ipa3_proxy_clk_vote();
+		if (ipa3_ctx->ipa_config_is_mhi)
+			ipa3_set_reset_client_cons_pipe_sus_holb(false,
+					IPA_CLIENT_MHI_CONS);
 		ipa3_reset_freeze_vote();
 		IPAWANINFO("IPA BEFORE_POWERUP handling is complete\n");
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		IPAWANINFO("IPA received MPSS AFTER_POWERUP\n");
+		ipa3_set_modem_up(true);
 		if (!atomic_read(&rmnet_ipa3_ctx->is_initialized) &&
 		       atomic_read(&rmnet_ipa3_ctx->is_ssr))
 			platform_driver_register(&rmnet_ipa_driver);
@@ -4649,9 +4654,9 @@ int rmnet_ipa3_query_per_client_stats(
 		 */
 		if (data->disconnect_clnt &&
 			lan_client->inited) {
-			IPAWANERR("Client not inited. Try again.\n");
+			IPAWANERR("Client not inited.\n");
 			mutex_unlock(&rmnet_ipa3_ctx->per_client_stats_guard);
-			return -EAGAIN;
+			return -EALREADY;
 		}
 
 	} else {
@@ -4773,7 +4778,7 @@ int rmnet_ipa3_query_per_client_stats(
 int rmnet_ipa3_query_per_client_stats_v2(
 		struct wan_ioctl_query_per_client_stats *data)
 {
-	int lan_clnt_idx, i, j;
+	int lan_clnt_idx, i, j, result = 1, stats_idx = 0;
 	struct ipa_lan_client *lan_client = NULL;
 	struct ipa_lan_client_cntr_index
 		*lan_client_index = NULL;
@@ -4824,6 +4829,7 @@ int rmnet_ipa3_query_per_client_stats_v2(
 			mutex_unlock(&rmnet_ipa3_ctx->per_client_stats_guard);
 			return -EINVAL;
 		}
+
 	} else {
 		/* Max number of clients. */
 		/* Check if disconnect flag is set and
@@ -4831,7 +4837,7 @@ int rmnet_ipa3_query_per_client_stats_v2(
 		 */
 		if (data->disconnect_clnt &&
 			rmnet_ipa3_check_any_client_inited(data->device_type)) {
-			IPAWANERR("CLient not inited. Try again.\n");
+			IPAWANERR("CLient not inited.\n");
 			mutex_unlock(&rmnet_ipa3_ctx->per_client_stats_guard);
 			return -EAGAIN;
 		}
@@ -4869,9 +4875,9 @@ int rmnet_ipa3_query_per_client_stats_v2(
 				lan_client_index[i].ul_cnt_idx,
 				lan_client_index[i].dl_cnt_idx);
 		memset(query, 0, sizeof(query_f));
-		ret = rmnet_ipa_get_hw_fnr_stats_v2(&lan_client_index[i],
+		result = rmnet_ipa_get_hw_fnr_stats_v2(&lan_client_index[i],
 				data, query);
-		if (ret) {
+		if (result) {
 			IPAWANERR("Failed: Client type %d, idx %d\n",
 					data->device_type, i);
 			kfree((void *)query->stats);
@@ -4879,21 +4885,26 @@ int rmnet_ipa3_query_per_client_stats_v2(
 		}
 		fnr_stats = &((struct ipa_flt_rt_stats *)
 				query->stats)[0];
-		data->client_info[i].ipv4_tx_bytes =
+		if (data->num_clients == 1)
+			stats_idx = 0;
+		else
+			stats_idx = i;
+		data->client_info[stats_idx].ipv4_tx_bytes =
 			fnr_stats->num_bytes;
 		fnr_stats = &((struct ipa_flt_rt_stats *)
 				query->stats)[1];
-		data->client_info[i].ipv4_rx_bytes =
+		data->client_info[stats_idx].ipv4_rx_bytes =
 			fnr_stats->num_bytes;
-		memcpy(data->client_info[i].mac,
+		memcpy(data->client_info[stats_idx].mac,
 				lan_client[i].mac,
 				IPA_MAC_ADDR_SIZE);
 
 		IPAWANDBG("Client ipv4_tx_bytes = %llu, ipv4_rx_bytes = %llu\n",
-				data->client_info[i].ipv4_tx_bytes,
-				data->client_info[i].ipv4_rx_bytes);
+				data->client_info[stats_idx].ipv4_tx_bytes,
+				data->client_info[stats_idx].ipv4_rx_bytes);
 
 		kfree((void *)query->stats);
+		ret = result;
 	}
 
 	/* Legacy per-client stats */

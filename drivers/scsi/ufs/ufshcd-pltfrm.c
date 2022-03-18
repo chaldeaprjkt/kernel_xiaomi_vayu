@@ -181,7 +181,10 @@ static int ufshcd_populate_vreg(struct device *dev, const char *name,
 		goto out;
 	}
 
-	vreg->min_uA = 0;
+	snprintf(prop_name, MAX_PROP_SIZE, "%s-min-microamp", name);
+	if (of_property_read_u32(np, prop_name, &vreg->min_uA))
+		vreg->min_uA = UFS_VREG_LPM_LOAD_UA;
+
 	if (!strcmp(name, "vcc")) {
 		if (of_property_read_bool(np, "vcc-supply-1p8")) {
 			vreg->min_uV = UFS_VREG_VCC_1P8_MIN_UV;
@@ -369,6 +372,14 @@ static void ufshcd_parse_dev_ref_clk_freq(struct ufs_hba *hba)
 		hba->dev_ref_clk_freq = REF_CLK_FREQ_26_MHZ;
 }
 
+static void ufshcd_parse_delay_ssu_flag(struct ufs_hba *hba)
+{
+	if (device_property_read_bool(hba->dev, "qcom,delay-ssu"))
+		hba->delay_ssu = true;
+	else
+		hba->delay_ssu = false;
+}
+
 #ifdef CONFIG_SMP
 /**
  * ufshcd_pltfrm_restore - restore power management function
@@ -546,6 +557,7 @@ int ufshcd_pltfrm_init(struct platform_device *pdev,
 	ufshcd_parse_gear_limits(hba);
 	ufshcd_parse_cmd_timeout(hba);
 	ufshcd_parse_force_g4_flag(hba);
+	ufshcd_parse_delay_ssu_flag(hba);
 	err = ufshcd_parse_extcon_info(hba);
 	if (err)
 		goto dealloc_host;

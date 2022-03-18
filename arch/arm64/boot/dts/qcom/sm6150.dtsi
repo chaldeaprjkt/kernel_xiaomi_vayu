@@ -1,4 +1,4 @@
- /* Copyright (c) 2018-2020, The Linux Foundation.All rights reserved.
+ /* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -646,12 +646,12 @@
 		};
 
 		/* global autoconfigured region for contiguous allocations */
-		linux,cma {
+		linux_cma: linux,cma {
 			compatible = "shared-dma-pool";
 			alloc-ranges = <0 0x00000000 0 0xffffffff>;
 			reusable;
 			alignment = <0 0x400000>;
-			size = <0 0x2800000>;
+			size = <0 0x2000000>;
 			linux,cma-default;
 		};
 	};
@@ -798,7 +798,7 @@
 			clock-output-names = "scc_pll_out_aux";
 			clocks = <&scc_pll_out_aux2>;
 			clock-mult = <1>;
-			clock-div = <2>;
+			clock-div = <3>;
 			#clock-cells = <0>;
 		};
 	};
@@ -1252,7 +1252,7 @@
 		};
 	};
 
-	mem_dump {
+	mem_dump: mem_dump {
 		compatible = "qcom,mem-dump";
 		memory-region = <&dump_mem>;
 
@@ -1795,6 +1795,7 @@
 
 	bluetooth: bt_wcn3990 {
 		compatible = "qca,wcn3990";
+		qca,bt-sw-ctrl-gpio = <&tlmm 102 0>; /* SW_CTRL */
 		qca,bt-vdd-core-supply = <&pm6150l_l1>;
 		qca,bt-vdd-pa-supply = <&pm6150l_l2>;
 		qca,bt-vdd-ldo-supply = <&pm6150l_l10>;

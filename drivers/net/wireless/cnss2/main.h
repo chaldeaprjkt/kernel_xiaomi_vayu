@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -57,6 +57,19 @@ struct cnss_vreg_info {
 	struct list_head list;
 	struct regulator *reg;
 	struct cnss_vreg_cfg cfg;
+	u32 enabled;
+};
+
+struct cnss_clk_cfg {
+	const char *name;
+	u32 freq;
+	u32 required;
+};
+
+struct cnss_clk_info {
+	struct list_head list;
+	struct clk *clk;
+	struct cnss_clk_cfg cfg;
 	u32 enabled;
 };
 
@@ -125,6 +138,7 @@ struct cnss_fw_mem {
 	phys_addr_t pa;
 	bool valid;
 	u32 type;
+	unsigned long attrs;
 };
 
 struct wlfw_rf_chip_info {
@@ -235,6 +249,7 @@ enum cnss_debug_quirks {
 	FBC_BYPASS,
 	ENABLE_DAEMON_SUPPORT,
 	IGNORE_PCI_LINK_FAILURE,
+	IGNORE_PROBE_FAIL_SHUTDOWN,
 };
 
 enum cnss_bdf_type {
@@ -273,6 +288,7 @@ struct cnss_plat_data {
 	void *bus_priv;
 	enum cnss_dev_bus_type bus_type;
 	struct list_head vreg_list;
+	struct list_head clk_list;
 	struct cnss_pinctrl_info pinctrl_info;
 	struct cnss_subsys_info subsys_info;
 	struct cnss_ramdump_info ramdump_info;
@@ -296,6 +312,7 @@ struct cnss_plat_data {
 	struct wlfw_rf_board_info board_info;
 	struct wlfw_soc_info soc_info;
 	struct wlfw_fw_version_info fw_version_info;
+	struct cnss_dev_mem_info dev_mem_info[CNSS_MAX_DEV_MEM_NUM];
 	u32 fw_mem_seg_len;
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG];
 	struct cnss_fw_mem m3_mem;
@@ -329,6 +346,7 @@ struct cnss_plat_data {
 	bool enumerate_done;
 	int qrtr_node_id;
 	unsigned int wlfw_service_instance_id;
+	enum cnss_suspend_mode suspend_mode;
 };
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
@@ -343,6 +361,8 @@ int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 int cnss_get_vreg(struct cnss_plat_data *plat_priv);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
 void cnss_put_vreg(struct cnss_plat_data *plat_priv);
+int cnss_get_clk(struct cnss_plat_data *plat_priv);
+void cnss_put_clk(struct cnss_plat_data *plat_priv);
 void cnss_put_pinctrl(struct cnss_plat_data *plat_priv);
 int cnss_power_on_device(struct cnss_plat_data *plat_priv);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
@@ -353,5 +373,11 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv);
 void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv);
 const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
 int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
+int cnss_va_to_pa(struct device *dev, size_t size, void *va, dma_addr_t dma,
+		  phys_addr_t *pa, unsigned long attrs);
+int cnss_minidump_add_region(struct cnss_plat_data *plat_priv,
+			     enum cnss_fw_dump_type type, int seg_no,
+			     void *va, phys_addr_t pa, size_t size);
+
 
 #endif /* _CNSS_MAIN_H */

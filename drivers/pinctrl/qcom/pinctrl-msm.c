@@ -1094,7 +1094,7 @@ static void gpio_muxed_to_pdc(struct irq_domain *pdc_domain, struct irq_data *d)
 			struct msm_pdc_mux_output *pdc_out =
 						&pctrl->soc->pdc_mux_out[j];
 
-			if (pdc_out->mux == mux)
+			if (pdc_out->mux == gpio)
 				break;
 			if (pdc_out->mux)
 				continue;

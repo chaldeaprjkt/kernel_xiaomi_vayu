@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,18 @@
 	qcom,board-id = <0x6010001 0x0>;
 };
 
+&pmxprairie_vadc {
+	xo_therm {
+		qcom,hw-settle-time = <800>;
+	};
+};
+
+&pmxprairie_adc_tm_iio {
+	xo_therm {
+		qcom,hw-settle-time = <1>;
+	};
+};
+
 /* delete pm8150b nodes */
 &thermal_zones {
 	/delete-node/ pm8150b-wp-therm;
@@ -39,6 +51,7 @@
 
 &usb {
 	extcon = <&vbus_detect>;
+	qcom,num-gsi-evt-buffs = <0x5>;
 };
 
 &spmi_bus {
