@@ -43,12 +43,6 @@ scm_version()
 		short=true
 	fi
 
-	# Check for aosp inline build
-	if grep -q '_' <<< "${TARGET_PRODUCT}"; then
-		# target string, excluding device name
-		printf '%s' "-${TARGET_PRODUCT%_*}"
-	fi
-
 	# Check for git and a git repo.
 	if test -z "$(git rev-parse --show-cdup 2>/dev/null)" &&
 	   head=$(git rev-parse --verify HEAD 2>/dev/null); then
