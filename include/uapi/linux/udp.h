@@ -20,12 +20,14 @@
 
 #include <linux/types.h>
 
+#ifdef __KERNEL__	/* only set these up for kernel code */
 struct udphdr {
 	__be16	source;
 	__be16	dest;
 	__be16	len;
 	__sum16	check;
 };
+#endif /* __KERNEL__ */
 
 /* UDP socket options */
 #define UDP_CORK	1	/* Never send partially complete segments */

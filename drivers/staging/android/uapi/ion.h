@@ -20,6 +20,10 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
+#ifndef __KERNEL__
+typedef int ion_user_handle_t;
+#endif /* __KERNEL__ */
+
 /**
  * enum ion_heap_types - list of all possible types of heaps
  * @ION_HEAP_TYPE_SYSTEM:	 memory allocated via vmalloc
