@@ -25,5 +25,5 @@
 	model = "VAYU";
 	compatible = "qcom,sm8150-cdp", "qcom,sm8150", "qcom,cdp";
 	qcom,board-id = <47 0>;
-	overlay-id = "chaldea-x3-pro";
+	overlay-id = "kyrielight-vayu";
 };
