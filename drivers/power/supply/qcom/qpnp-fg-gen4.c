@@ -763,11 +763,6 @@ static int fg_gen4_get_battery_temp(struct fg_dev *fg, int *val)
 	int rc = 0;
 	u16 buf;
 
-	if (fg->batt_fake_temp != -EINVAL) {
-		*val = fg->batt_fake_temp;
-		pr_err("use fake batt temp =%d\n", fg->batt_fake_temp);
-		return 0;
-	}
 	rc = fg_sram_read(fg, BATT_TEMP_WORD, BATT_TEMP_OFFSET, (u8 *)&buf,
 			2, FG_IMA_DEFAULT);
 	if (rc < 0) {
@@ -4814,11 +4809,6 @@ static int fg_psy_get_property(struct power_supply *psy,
 	switch (psp) {
 #ifdef CONFIG_BATT_VERIFY_BY_DS28E16
 	case POWER_SUPPLY_PROP_AUTHENTIC:
-		if (fg->fake_authentic != -EINVAL) {
-			pval->intval = fg->fake_authentic;
-			break;
-		}
-
 		if (fg->max_verify_psy == NULL)
 			return -ENODATA;
 		rc = power_supply_get_property(fg->max_verify_psy,
@@ -4836,10 +4826,6 @@ static int fg_psy_get_property(struct power_supply *psy,
 		memcpy(chip->ds_romid, b_val.arrayval, 8);
 		break;
 	case POWER_SUPPLY_PROP_CHIP_OK:
-		if (fg->fake_chip_ok != -EINVAL) {
-			pval->intval = fg->fake_chip_ok;
-			break;
-		}
 		if (fg->max_verify_psy == NULL)
 			return -ENODATA;
 
@@ -5194,17 +5180,6 @@ static int fg_psy_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SHUTDOWN_DELAY_ENABLE:
 		chip->dt.shutdown_delay_enable = pval->intval;
 		break;
-#ifdef CONFIG_BATT_VERIFY_BY_DS28E16
-	case POWER_SUPPLY_PROP_AUTHENTIC:
-		fg->fake_authentic = !!pval->intval;
-		break;
-	case POWER_SUPPLY_PROP_CHIP_OK:
-		fg->fake_chip_ok = !!pval->intval;
-		break;
-#endif
-	case POWER_SUPPLY_PROP_TEMP:
-		fg->batt_fake_temp = pval->intval;
-		break;
 	default:
 		break;
 	}
@@ -5232,11 +5207,6 @@ static int fg_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SYS_TERMINATION_CURRENT:
 	case POWER_SUPPLY_PROP_VBATT_FULL_VOL:
 	case POWER_SUPPLY_PROP_KI_COEFF_CURRENT:
-#ifdef CONFIG_BATT_VERIFY_BY_DS28E16
-	case POWER_SUPPLY_PROP_AUTHENTIC:
-	case POWER_SUPPLY_PROP_CHIP_OK:
-#endif
-	case POWER_SUPPLY_PROP_TEMP:
 		return 1;
 	default:
 		break;
@@ -7033,9 +7003,6 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	fg->vbat_critical_low_count = 0;
 	fg->vbatt_full_volt_uv = 0;
 	chip->calib_level = -EINVAL;
-	fg->fake_authentic = -EINVAL;
-	fg->fake_chip_ok = -EINVAL;
-	fg->batt_fake_temp = -EINVAL;
 #ifdef CONFIG_BATT_VERIFY_BY_DS28E16
 	chip->battery_authentic_result = -EINVAL;
 	memset(chip->ds_romid, 0, 8);
