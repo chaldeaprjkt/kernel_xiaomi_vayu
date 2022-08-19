@@ -9,10 +9,6 @@
 #define _K_SS_ALIGNSIZE	(__alignof__ (struct sockaddr *))
 				/* Implementation specific desired alignment */
 
-#ifndef __KERNEL__
-#define sockaddr_storage __kernel_sockaddr_storage
-#endif /* __KERNEL__ */
-
 typedef unsigned short __kernel_sa_family_t;
 
 struct __kernel_sockaddr_storage {
