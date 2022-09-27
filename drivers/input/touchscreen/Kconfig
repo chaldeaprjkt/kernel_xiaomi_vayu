@@ -1312,6 +1312,8 @@ config TOUCHSCREEN_RAYDIUM_CHIPSET
 
 	  If unsure, say N.
 
+source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+
 config TOUCHSCREEN_COMMON
 	bool "Common touchscreen interface to interact with userspace"
 	default y
