@@ -112,8 +112,6 @@ u64 __cacheline_aligned boot_args[4];
 unsigned int logical_bootcpu_id __read_mostly;
 EXPORT_SYMBOL(logical_bootcpu_id);
 
-extern void *__init __fixmap_remap_fdt(phys_addr_t dt_phys, int *size,
-				       pgprot_t prot);
 /*
  * Parse the device tree cpu nodes and enumerate logical cpu number for
  * the boot cpu based on the mpidr value and reg value from the cpu node.
@@ -134,7 +132,7 @@ static unsigned int __init parse_logical_bootcpu(u64 dt_phys)
 	 * attempt at mapping the FDT in setup_machine()
 	 */
 	early_fixmap_init();
-	fdt = __fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);
+	fdt = fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);
 	if (!fdt)
 		return 0;
 
@@ -291,9 +289,13 @@ const char * __init __weak arch_read_overlay_id(void)
 
 static void __init setup_machine_fdt(phys_addr_t dt_phys)
 {
-	void *dt_virt = fixmap_remap_fdt(dt_phys);
-	const char *machine_name;
+	int size;
+	void *dt_virt = fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);
+	const char *name;
 	const char *overlay_id;
+
+	if (dt_virt)
+		memblock_reserve(dt_phys, size);
 
 	if (!dt_virt || !early_init_dt_scan(dt_virt)) {
 		pr_crit("\n"
@@ -306,8 +308,11 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 			cpu_relax();
 	}
 
-	machine_name = arch_read_machine_name();
-	if (!machine_name)
+	/* Early fixups are done, map the FDT as read-only now */
+	fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL_RO);
+
+	name = of_flat_dt_get_machine_name();
+	if (!name)
 		return;
 
 	overlay_id = arch_read_overlay_id();
@@ -320,8 +325,8 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 #endif
 	}
 
-	pr_info("Machine: %s\n", machine_name);
-	dump_stack_set_arch_desc("%s (DT)", machine_name);
+	pr_info("Machine: %s\n", name);
+	dump_stack_set_arch_desc("%s (DT)", name);
 }
 
 static void __init request_standard_resources(void)
