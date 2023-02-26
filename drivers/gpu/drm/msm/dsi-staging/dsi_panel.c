@@ -1698,14 +1698,6 @@ error:
 	return rc;
 }
 
-static int __initdata phyd_mult = -1;
-static int __init _setup_phyd_mult(char *str)
-{
-	get_option(&str, &phyd_mult);
-	return 0;
-}
-early_param("msm_dsi.phyd_multiplier", _setup_phyd_mult);
-
 static int dsi_panel_parse_phy_props(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -1734,11 +1726,6 @@ static int dsi_panel_parse_phy_props(struct dsi_panel *panel)
 		rc = 0;
 	} else {
 		props->panel_height_mm = val;
-	}
-
-	if (phyd_mult > 0 && props->panel_width_mm && props->panel_height_mm) {
-		props->panel_width_mm *= phyd_mult;
-		props->panel_height_mm *= phyd_mult;
 	}
 
 	str = utils->get_property(utils->data,
