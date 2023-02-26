@@ -1698,6 +1698,14 @@ error:
 	return rc;
 }
 
+static int __initdata phyd_miui = 0;
+static int __init _setup_phyd_miui(char *str)
+{
+	get_option(&str, &phyd_miui);
+	return 0;
+}
+early_param("msm_dsi.phyd_miui", _setup_phyd_miui);
+
 static int dsi_panel_parse_phy_props(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -1727,6 +1735,22 @@ static int dsi_panel_parse_phy_props(struct dsi_panel *panel)
 	} else {
 		props->panel_height_mm = val;
 	}
+
+	if (phyd_miui) {
+		rc = utils->read_u32(utils->data,
+			"miui,mdss-pan-physical-width-dimension", &val);
+		if (!rc) {
+			props->panel_width_mm = val;
+		}
+		rc = utils->read_u32(utils->data,
+			"miui,mdss-pan-physical-height-dimension", &val);
+		if (!rc) {
+			props->panel_height_mm = val;
+		}
+		pr_info("using miui phyd w=%d,h=%d", props->panel_width_mm,
+			props->panel_height_mm);
+	}
+
 
 	str = utils->get_property(utils->data,
 			"qcom,mdss-dsi-panel-orientation", NULL);
