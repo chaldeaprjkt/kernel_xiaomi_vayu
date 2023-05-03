@@ -2,7 +2,7 @@
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.aarch64
 
 CROSS_COMPILE=aarch64-linux-android-
-CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r450784e/bin
+CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r487747/bin
 LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
 DEFCONFIG=vayu_defconfig
 LLVM=1
